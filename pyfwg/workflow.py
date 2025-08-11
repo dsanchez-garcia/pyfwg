@@ -3,7 +3,10 @@ import re
 import shutil
 import subprocess
 import logging
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Union
+
+from .constants import ALL_POSSIBLE_SCENARIOS, ALL_POSSIBLE_YEARS, DEFAULT_GCMS
+
 
 # --- Logging Configuration ---
 logging.basicConfig(
@@ -65,7 +68,7 @@ class MorphingWorkflow:
     def map_categories(self,
                        epw_files: List[str],
                        input_filename_pattern: Optional[str] = None,
-                       keyword_mapping: Optional[Dict[str, Dict[str, List[str]]]] = None):
+                       keyword_mapping: Optional[Dict[str, Dict[str, Union[str, List[str]]]]] = None):
         """STEP 1: Identifies and maps categories for each EPW file.
 
         This method populates the `self.epw_categories` and
@@ -93,18 +96,19 @@ class MorphingWorkflow:
             input_filename_pattern (Optional[str], optional): A Python regex
                 string with named capture groups. Defaults to None.
                 Example: `r'(?P<city>.*?)_(?P<uhi_type>.*)'`
-            keyword_mapping (Optional[Dict[str, Dict[str, List[str]]]], optional):
+            keyword_mapping (Optional[Dict[str, Dict[str, Union[str, List[str]]]]], optional):
                 A dictionary of rules for keyword searching or normalization.
-                Defaults to None.
-                Structure: `{category: {final_value: [list_of_keywords]}}`
+                The innermost value can be a single string for one keyword or a
+                list of strings for multiple keywords. Defaults to None.
+                Structure: `{category: {final_value: 'keyword' or ['keyword1', 'keyword2']}}`
 
         Raises:
-            ValueError: If both or neither of `input_filename_pattern` and
+            ValueError: If neither of `input_filename_pattern` and
                 `keyword_mapping` are provided.
         """
         logging.info("--- Step 1: Mapping categories from filenames ---")
 
-        # Ensure that one, and only one, mapping strategy is provided.
+        # Ensure that at least one mapping strategy is provided.
         if not input_filename_pattern and not keyword_mapping:
             raise ValueError("You must provide at least one mapping method: 'input_filename_pattern' or 'keyword_mapping'.")
 
@@ -152,8 +156,11 @@ class MorphingWorkflow:
                     # If a mapping dictionary is provided, try to normalize the raw value.
                     if keyword_mapping and category in keyword_mapping:
                         # Look for the raw value in the keyword lists.
-                        for mapped_val, keywords in keyword_mapping[category].items():
-                            if raw_value.lower() in [k.lower() for k in keywords]:
+                        for mapped_val, keywords_or_str in keyword_mapping[category].items():
+                            # --- FLEXIBILITY LOGIC ---
+                            # Normalize a single string to a list with one item for consistent processing.
+                            keywords_list = [keywords_or_str] if isinstance(keywords_or_str, str) else keywords_or_str
+                            if raw_value.lower() in [k.lower() for k in keywords_list]:
                                 final_value = mapped_val  # Replace with the clean value.
                                 break
                     normalized_values[category] = final_value
@@ -166,9 +173,12 @@ class MorphingWorkflow:
                 epw_name_lower = os.path.basename(epw_path).lower()
                 # Iterate through the user-defined mapping rules.
                 for category, rules in keyword_mapping.items():
-                    for final_value, keywords in rules.items():
+                    for final_value, keywords_or_str in rules.items():
+                        # --- FLEXIBILITY LOGIC ---
+                        # Normalize a single string to a list with one item for consistent processing.
+                        keywords_list = [keywords_or_str] if isinstance(keywords_or_str, str) else keywords_or_str
                         # If any keyword is found in the filename, assign the category and stop.
-                        if any(keyword.lower() in epw_name_lower for keyword in keywords):
+                        if any(keyword.lower() in epw_name_lower for keyword in keywords_list):
                             file_categories[category] = final_value
                             break  # Move to the next category.
 
