@@ -1,0 +1,14 @@
+# Ensemble ssp245 2050
+# Standard deviation (sd) columns are the standard deviation of the selected models in the Ensemble when the ensemble option is TRUE.
+# Otherwise these are related to the month standard deviation obtained from the climate model.
+Variable,Abbreviation,Unit,Jan,Jan (sd),Feb,Feb (sd),Mar,Mar (sd),Apr,Apr (sd),May,May (sd),Jun,Jun (sd),Jul,Jul (sd),Aug,Aug (sd),Sep,Sep (sd),Oct,Oct (sd),Nov,Nov (sd),Dec,Dec (sd)
+Near surface air temperature,tas,∆°C,1.22,0.43,1.25,0.40,1.35,0.38,1.66,0.50,2.01,0.56,2.34,0.59,2.30,0.66,2.21,0.63,2.25,0.56,2.05,0.53,1.50,0.47,1.23,0.48
+Daily maximum near surface air temperature,tasmax,∆°C,1.32,0.36,1.32,0.39,1.49,0.48,1.92,0.67,2.25,0.76,2.52,0.73,2.43,0.75,2.29,0.66,2.37,0.64,2.18,0.59,1.61,0.50,1.30,0.43
+Daily minimum near surface air temperature,tasmin,∆°C,1.18,0.55,1.21,0.50,1.23,0.41,1.43,0.45,1.75,0.46,2.19,0.51,2.20,0.58,2.13,0.60,2.13,0.54,1.95,0.54,1.45,0.52,1.21,0.55
+Precipitation,pr,fraction,1.07,0.36,0.99,0.25,0.93,0.24,0.87,0.19,0.82,0.19,0.81,0.22,0.77,0.24,0.77,0.26,0.77,0.26,0.87,0.14,0.90,0.18,1.01,0.20
+Surface downwelling shortwave radiation,rsds,∆W/m²,2.47,4.98,2.64,4.47,5.19,5.54,9.70,6.67,9.38,7.65,6.04,4.10,3.16,4.55,2.85,3.48,4.29,3.66,3.83,2.62,3.06,3.62,2.26,3.62
+Total cloud cover percentage,clt,∆%,-1.02,4.57,-0.51,3.81,-1.26,3.70,-4.27,3.44,-4.07,2.97,-2.80,1.76,-1.96,2.02,-2.53,2.44,-2.56,2.25,-2.81,2.46,-1.95,3.14,-1.60,3.38
+Snow depth,snd,fraction,1.18,2.00,1.17,1.64,1.92,2.99,1.03,0.74,0.99,0.03,1.00,0.00,1.00,0.00,1.00,0.00,1.00,0.00,0.99,0.03,1.17,1.04,1.46,2.43
+Near surface specific humidity,huss,∆kg/kg,0.000464,0.000302,0.000429,0.000269,0.000385,0.000248,0.000258,0.000298,0.000374,0.000395,0.000505,0.000492,0.000722,0.000469,0.000901,0.000419,0.000832,0.000492,0.000799,0.000429,0.000615,0.000348,0.000481,0.000302
+Air pressure at mean sea level,psl,∆hPa,0.03,1.76,0.11,1.17,0.10,1.19,0.19,0.86,-0.11,0.44,-0.55,0.30,-0.65,0.28,-0.81,0.47,-0.31,0.40,0.05,0.53,0.15,0.94,-0.07,1.16
+Near surface wind speed,sfcWind,fraction,0.9941,0.0524,0.9950,0.0482,0.9827,0.0399,0.9958,0.0366,1.0014,0.0338,1.0105,0.0531,1.0125,0.0338,1.0097,0.0318,0.9939,0.0313,0.9762,0.0265,0.9720,0.0368,0.9960,0.0348

@@ -1,0 +1,284 @@
+import os
+import re
+import shutil
+import subprocess
+import logging
+from typing import List, Optional, Dict, Any
+
+# --- Logging Configuration ---
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+
+# --- Constants for FWG Output ---
+ALL_POSSIBLE_SCENARIOS = ['ssp126', 'ssp245', 'ssp370', 'ssp585']
+ALL_POSSIBLE_YEARS = [2050, 2080]
+
+# --- Default GCMs List ---
+DEFAULT_GCMS = [
+    'BCC_CSM2_MR', 'CanESM5', 'CanESM5_1', 'CanESM5_CanOE', 'CAS_ESM2_0',
+    'CMCC_ESM2', 'CNRM_CM6_1', 'CNRM_CM6_1_HR', 'CNRM_ESM2_1', 'EC_Earth3',
+    'EC_Earth3_Veg', 'EC_Earth3_Veg_LR', 'FGOALS_g3', 'GFDL_ESM4',
+    'GISS_E2_1_G', 'GISS_E2_1_H', 'GISS_E2_2_G', 'IPSL_CM6A_LR',
+    'MIROC_ES2H', 'MIROC_ES2L', 'MIROC6', 'MRI_ESM2_0', 'UKESM1_0_LL'
+]
+
+
+class MorphingWorkflow:
+    """
+    Manages the EPW morphing process in a controlled, step-by-step manner.
+    """
+
+    def __init__(self):
+        self.inputs: Dict[str, Any] = {}
+        self.epw_categories: Dict[str, Dict[str, str]] = {}
+        self.incomplete_epw_categories: Dict[str, Dict[str, str]] = {}
+        self.epws_to_be_morphed: List[str] = []
+        self.rename_plan: Dict[str, Dict[str, str]] = {}
+
+    def map_categories(self,
+                       epw_files: List[str],
+                       input_filename_pattern: Optional[str] = None,
+                       keyword_mapping: Optional[Dict[str, Dict[str, List[str]]]] = None):
+        # This method is correct and remains unchanged.
+        logging.info("--- Step 1: Mapping categories from filenames ---")
+        if not input_filename_pattern and not keyword_mapping: raise ValueError("You must provide at least one mapping method.")
+        self.inputs['epw_files'] = epw_files
+        self.epw_categories, self.incomplete_epw_categories = {}, {}
+        for epw_path in epw_files:
+            if not os.path.exists(epw_path): logging.warning(f"EPW file not found, skipping: {epw_path}"); continue
+            file_categories = {}
+            epw_base_name = os.path.splitext(os.path.basename(epw_path))[0]
+            if input_filename_pattern:
+                match = re.search(input_filename_pattern, epw_base_name)
+                if not match: logging.warning(f"Pattern did not match '{epw_base_name}'. Skipping."); continue
+                raw_values = match.groupdict()
+                normalized_values = {}
+                for category, raw_value in raw_values.items():
+                    if raw_value is None: continue
+                    final_value = raw_value
+                    if keyword_mapping and category in keyword_mapping:
+                        for mapped_val, keywords in keyword_mapping[category].items():
+                            if raw_value.lower() in [k.lower() for k in keywords]: final_value = mapped_val; break
+                    normalized_values[category] = final_value
+                file_categories = normalized_values
+            elif keyword_mapping:
+                epw_name_lower = os.path.basename(epw_path).lower()
+                for category, rules in keyword_mapping.items():
+                    for final_value, keywords in rules.items():
+                        if any(keyword.lower() in epw_name_lower for keyword in keywords): file_categories[category] = final_value; break
+            if file_categories:
+                logging.info(f"Mapped '{epw_path}': {file_categories}")
+                if keyword_mapping and not input_filename_pattern:
+                    all_defined_categories = set(keyword_mapping.keys())
+                    found_categories = set(file_categories.keys())
+                    if len(found_categories) < len(all_defined_categories):
+                        missing = all_defined_categories - found_categories
+                        logging.warning(f"File '{os.path.basename(epw_path)}' is missing categories: {list(missing)}.")
+                        self.incomplete_epw_categories[epw_path] = file_categories
+                    else:
+                        self.epw_categories[epw_path] = file_categories
+                else:
+                    self.epw_categories[epw_path] = file_categories
+            else:
+                logging.warning(f"Could not map any categories for '{epw_path}'. Skipping.")
+        logging.info("Category mapping complete.")
+
+    def preview_rename_plan(self,
+                            final_output_dir: str,
+                            output_filename_pattern: str,
+                            scenario_mapping: Optional[Dict[str, str]] = None):
+        # This method is correct and remains unchanged.
+        if not self.epw_categories and not self.incomplete_epw_categories: raise RuntimeError("Please run map_categories() first.")
+        logging.info("--- Step 2: Generating rename and move plan ---")
+        self.inputs.update({'final_output_dir': final_output_dir, 'output_filename_pattern': output_filename_pattern, 'scenario_mapping': scenario_mapping or {}})
+        self.rename_plan = {}
+        all_mapped_files = {**self.epw_categories, **self.incomplete_epw_categories}
+        required_placeholders = set(re.findall(r'{(.*?)}', output_filename_pattern))
+        auto_placeholders = {'scenario', 'ssp_full_name', 'year'}
+        required_from_mapping = required_placeholders - auto_placeholders
+        print("\n" + "=" * 60 + "\n          MORPHING AND RENAMING PREVIEW\n" + "=" * 60)
+        print(f"\nFinal Output Directory: {os.path.abspath(final_output_dir)}")
+        for epw_path, mapped_data in all_mapped_files.items():
+            is_incomplete = epw_path in self.incomplete_epw_categories
+            status_flag = " [INCOMPLETE MAPPING]" if is_incomplete else ""
+            print(f"\n  For input file: {os.path.basename(epw_path)}{status_flag}")
+            missing_keys = required_from_mapping - set(mapped_data.keys())
+            if missing_keys: print(f"    -> ERROR: This file is missing required categories for the output pattern: {list(missing_keys)}. Renaming will fail."); continue
+            self.rename_plan[epw_path] = {}
+            for year in ALL_POSSIBLE_YEARS:
+                for scenario in ALL_POSSIBLE_SCENARIOS:
+                    filename_data = {**mapped_data, 'scenario': scenario, 'ssp_full_name': self.inputs['scenario_mapping'].get(scenario, scenario), 'year': year}
+                    new_base_name = output_filename_pattern.format(**filename_data)
+                    final_epw_path = os.path.join(final_output_dir, new_base_name + ".epw")
+                    generated_file_key = f"{scenario}_{year}.epw"
+                    self.rename_plan[epw_path][generated_file_key] = final_epw_path
+                    print(f"    -> Generated '{generated_file_key}' will be moved to: {os.path.abspath(final_epw_path)}")
+        print("=" * 60 + "\nPreview complete. If this plan is correct, call set_morphing_config().")
+
+    def set_morphing_config(self, *,
+                            fwg_jar_path: str,
+                            run_incomplete_files: bool = False,
+                            delete_temp_files: bool = True,
+                            temp_base_dir: str = './morphing_temp_results',
+                            fwg_show_tool_output: bool = False,
+                            fwg_params: Optional[Dict[str, Any]] = None,
+                            # --- Explicit FutureWeatherGenerator Arguments (Overrides fwg_params) ---
+                            fwg_gcms: Optional[List[str]] = None, fwg_create_ensemble: bool = True,
+                            fwg_winter_sd_shift: float = 0.0, fwg_summer_sd_shift: float = 0.0,
+                            fwg_month_transition_hours: int = 72, fwg_use_multithreading: bool = True,
+                            fwg_interpolation_method_id: int = 0, fwg_limit_variables: bool = True,
+                            fwg_solar_hour_adjustment: int = 1, fwg_diffuse_irradiation_model: int = 1,
+                            fwg_uhi_options: str = "1:14:1"):
+        """
+        STEP 3: Sets and reviews the configuration for the morphing execution.
+        """
+        logging.info("--- Step 3: Setting Morphing Configuration ---")
+
+        # --- Build the final, user-friendly fwg_params dictionary ---
+        final_fwg_params = fwg_params.copy() if fwg_params else {}
+        overrides = {
+            'gcms': fwg_gcms, 'create_ensemble': fwg_create_ensemble,
+            'winter_sd_shift': fwg_winter_sd_shift, 'summer_sd_shift': fwg_summer_sd_shift,
+            'month_transition_hours': fwg_month_transition_hours, 'use_multithreading': fwg_use_multithreading,
+            'interpolation_method_id': fwg_interpolation_method_id, 'limit_variables': fwg_limit_variables,
+            'solar_hour_adjustment': fwg_solar_hour_adjustment, 'diffuse_irradiation_model': fwg_diffuse_irradiation_model,
+            'uhi_options': fwg_uhi_options
+        }
+        final_fwg_params.update(overrides)
+        if final_fwg_params.get('gcms') is None:
+            final_fwg_params['gcms'] = DEFAULT_GCMS
+
+        # --- Build the command-line formatted dictionary ---
+        formatted_params = {
+            'gcms': ",".join(final_fwg_params['gcms']),
+            'create_ensemble': '1' if final_fwg_params['create_ensemble'] else '0',
+            'sd_shift': f"{final_fwg_params['winter_sd_shift']}:{final_fwg_params['summer_sd_shift']}",
+            'month_transition_hours': str(final_fwg_params['month_transition_hours']),
+            'use_multithreading': str(final_fwg_params['use_multithreading']).lower(),
+            'interpolation_method_id': str(final_fwg_params['interpolation_method_id']),
+            'limit_variables': str(final_fwg_params['limit_variables']).lower(),
+            'solar_hour_adjustment': str(final_fwg_params['solar_hour_adjustment']),
+            'diffuse_irradiation_model': str(final_fwg_params['diffuse_irradiation_model']),
+            'uhi_options': final_fwg_params['uhi_options']
+        }
+
+        # --- Determine the final list of files to process ---
+        files_to_process = list(self.epw_categories.keys())
+        if run_incomplete_files:
+            files_to_process.extend(self.incomplete_epw_categories.keys())
+        self.epws_to_be_morphed = files_to_process
+
+        # --- Store all settings in the main inputs attribute ---
+        self.inputs.update({
+            'fwg_jar_path': fwg_jar_path,
+            'run_incomplete_files': run_incomplete_files,
+            'delete_temp_files': delete_temp_files,
+            'temp_base_dir': temp_base_dir,
+            'show_tool_output': fwg_show_tool_output,
+            'fwg_params': final_fwg_params,
+            'fwg_params_formatted': formatted_params
+        })
+
+        # --- Print the final configuration for user review ---
+        print("\n" + "=" * 60 + "\n          MORPHING CONFIGURATION REVIEW\n" + "=" * 60)
+        print(f"  - FWG JAR Path: {self.inputs['fwg_jar_path']}")
+        print(f"  - Run Incomplete Files: {self.inputs['run_incomplete_files']}")
+        print(f"  - Delete Temporary Files: {self.inputs['delete_temp_files']}")
+        print(f"  - Show Tool Output: {self.inputs['show_tool_output']}")
+        print(f"\n  - EPWs to be Morphed ({len(self.epws_to_be_morphed)} files):")
+        for epw in self.epws_to_be_morphed: print(f"    - {os.path.basename(epw)}")
+        print("\n  --- Final Formatted FWG Parameters ---")
+        for key, value in self.inputs['fwg_params_formatted'].items():
+            print(f"    - {key}: {value}")
+        print("=" * 60 + "\nConfiguration set. Call execute_morphing() to start the process.")
+
+    def execute_morphing(self):
+        """
+        STEP 4: Executes the morphing process using the previously set configuration.
+        This method takes no arguments.
+        """
+        if 'fwg_params' not in self.inputs:
+            raise RuntimeError("Configuration has not been set. Please run set_morphing_config() before executing.")
+
+        logging.info("--- Step 4: Executing morphing workflow ---")
+
+        os.makedirs(self.inputs['final_output_dir'], exist_ok=True)
+        os.makedirs(self.inputs['temp_base_dir'], exist_ok=True)
+
+        for epw_path in self.epws_to_be_morphed:
+            if epw_path not in self.rename_plan:
+                logging.warning(f"Skipping '{os.path.basename(epw_path)}' as it had errors during the preview stage.");
+                continue
+
+            temp_epw_output_dir = os.path.join(self.inputs['temp_base_dir'], os.path.splitext(os.path.basename(epw_path))[0])
+            os.makedirs(temp_epw_output_dir, exist_ok=True)
+
+            success = self._execute_single_morph(epw_path, temp_epw_output_dir)
+
+            if success:
+                self._process_generated_files(epw_path, temp_epw_output_dir)
+                if self.inputs['delete_temp_files']:
+                    logging.info(f"Deleting temporary directory: {temp_epw_output_dir}")
+                    shutil.rmtree(temp_epw_output_dir)
+
+        logging.info("Morphing workflow finished.")
+
+    def _execute_single_morph(self, epw_path: str, temp_output_dir: str) -> bool:
+        formatted_params = self.inputs['fwg_params_formatted']
+        command = [
+            'java', '-cp', self.inputs['fwg_jar_path'], 'futureweathergenerator.Morph',
+            os.path.abspath(epw_path),
+            formatted_params['gcms'],
+            formatted_params['create_ensemble'],
+            formatted_params['sd_shift'],
+            formatted_params['month_transition_hours'],
+            os.path.abspath(temp_output_dir) + os.sep,
+            formatted_params['use_multithreading'],
+            formatted_params['interpolation_method_id'],
+            formatted_params['limit_variables'],
+            formatted_params['solar_hour_adjustment'],
+            formatted_params['diffuse_irradiation_model'],
+            formatted_params['uhi_options']
+        ]
+
+        print("\n" + "-" * 20, f"Executing FWG for {os.path.basename(epw_path)}", "-" * 20)
+        print("  Full Command:", ' '.join(command))
+
+        show_output = self.inputs.get('show_tool_output', False)
+        stdout_dest = None if show_output else subprocess.PIPE
+        stderr_dest = None if show_output else subprocess.PIPE
+
+        if show_output: print("  --- FWG Real-time Output ---")
+
+        try:
+            subprocess.run(command, text=True, check=True, timeout=600, stdout=stdout_dest, stderr=stderr_dest)
+            if show_output: print("  --- End of FWG Output ---")
+            return True
+        except subprocess.CalledProcessError as e:
+            logging.error(f"Error morphing {os.path.basename(epw_path)}:")
+            if e.stdout: logging.error(f"STDOUT:\n{e.stdout}")
+            if e.stderr: logging.error(f"STDERR:\n{e.stderr}")
+            return False
+
+    def _process_generated_files(self, source_epw_path: str, temp_dir: str):
+        # This private method is correct and remains unchanged.
+        logging.info(f"Processing generated files in: {temp_dir}")
+        plan_for_this_epw = self.rename_plan.get(source_epw_path, {})
+        for generated_file in os.listdir(temp_dir):
+            destination_path = None
+            for expected_key, final_path in plan_for_this_epw.items():
+                if os.path.splitext(expected_key)[0] in generated_file:
+                    if generated_file.endswith(".stat"):
+                        destination_path = os.path.splitext(final_path)[0] + ".stat"
+                    else:
+                        destination_path = final_path
+                    break
+            if destination_path:
+                source_path = os.path.join(temp_dir, generated_file)
+                logging.info(f"Moving '{source_path}' to '{destination_path}'")
+                shutil.move(source_path, destination_path)
+            else:
+                logging.warning(f"Could not find a rename plan for generated file '{generated_file}'. It will be left in the temp directory.")
