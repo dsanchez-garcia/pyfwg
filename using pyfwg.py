@@ -20,8 +20,8 @@ mapping = {
             'madrid': ['madrid', 'MAD']
         },
         'uhi': {
-            'type_1': ['tipo-1'],
-            'type_2': ['tipo-2']
+            'type_1': ['type-1'],
+            'type_2': ['type-2']
         }
     }
 
@@ -70,8 +70,8 @@ mapping = {
             'madrid': ['madrid', 'MAD']
         },
         'uhi': {
-            'type_1': ['tipo-1'],
-            'type_2': ['tipo-2']
+            'type_1': ['type-1'],
+            'type_2': ['type-2']
         }
     }
 
