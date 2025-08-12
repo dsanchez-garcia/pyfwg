@@ -4,10 +4,24 @@ import os
 import shutil
 import logging
 from typing import List, Union, Optional, Dict, Any
+import time
 
 # Importa la clase del flujo de trabajo para usarla como motor interno
 from .workflow import MorphingWorkflow
 
+def _robust_rmtree(path: str, max_retries: int = 5, delay: float = 0.5):
+    """
+    A robust version of shutil.rmtree that retries on PermissionError.
+    This is useful for handling filesystem race conditions on Windows.
+    """
+    for i in range(max_retries):
+        try:
+            shutil.rmtree(path)
+            return
+        except PermissionError:
+            logging.warning(f"PermissionError deleting {path}. Retrying in {delay}s... (Attempt {i+1}/{max_retries})")
+            time.sleep(delay)
+    logging.error(f"Failed to delete directory {path} after {max_retries} retries.")
 
 def morph_epw(*,
               epw_paths: Union[str, List[str]],
@@ -114,7 +128,7 @@ def morph_epw(*,
 
             # Limpia el directorio temporal si se solicita
             if workflow.inputs['delete_temp_files']:
-                shutil.rmtree(temp_epw_output_dir)
+                _robust_rmtree(temp_epw_output_dir)
 
     logging.info(f"Direct morphing complete. {len(final_file_paths)} files created in {os.path.abspath(output_dir)}")
     return final_file_paths

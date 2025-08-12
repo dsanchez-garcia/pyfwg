@@ -1,15 +1,8 @@
 from pyfwg import morph_epw
 
-jar_path = r"D:\path\to\your\FutureWeatherGenerator_v3.0.0.jar"
-epw_file = 'MAD_ICU_tipo-2.epw'
+jar_path = r"D:\OneDrive - Universidad de Cádiz (uca.es)\Programas\FutureWeatherGenerator_v3.0.0.jar"
+epw_file = 'MAD_ICU_type-2.epw'
 
-# --- CASO 1: Uso simple con valores por defecto ---
-# Solo se requieren las rutas.
-# created_files = morph_epw(epw_paths=epw_file, fwg_jar_path=jar_path)
-
-
-# --- CASO 2: Uso avanzado con parámetros personalizados ---
-# El usuario puede anular cualquier parámetro de FWG que desee.
 # La validación se ejecuta automáticamente.
 created_files_custom = morph_epw(
     epw_paths=epw_file,

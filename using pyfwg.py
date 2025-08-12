@@ -34,14 +34,13 @@ workflow_pattern.map_categories(
 
 workflow_pattern.preview_rename_plan(
     final_output_dir='./final_results_direct_map_2',
-    # The output pattern must use the 'basename' placeholder
-    output_filename_pattern='{city}_{uhi}_{ssp_full_name}_{year}',
-    # scenarios=['ssp245'],
-    # years=[2050],
+    output_filename_pattern='{city}_{uhi}_{ssp}_{year}',
+    # output_filename_pattern='{city}_{uhi}_{ssp}',
     scenario_mapping={'ssp245': 'SSP2-4.5'}
 )
 
-models = pyfwg.DEFAULT_GCMS
+
+# models = pyfwg.DEFAULT_GCMS
 
 workflow_pattern.set_morphing_config(
     fwg_jar_path=jar_path,
@@ -56,7 +55,7 @@ workflow_pattern.execute_morphing()
 
 ## --- EXAMPLE 2: No pattern, using direct mapping for irregular filenames ---
 
-import pyfwg as pyfwg
+import pyfwg
 from os import listdir
 
 # jar_path = 'D:\\OneDrive - Universidad de Cádiz (uca.es)\\Programas\\FutureWeatherGenerator_v3.0.0.jar'
@@ -86,14 +85,9 @@ workflow_direct.map_categories(
 
 workflow_direct.preview_rename_plan(
     final_output_dir='./final_results_direct_map',
-    # The output pattern must use the 'basename' placeholder
-    output_filename_pattern='{city}_{uhi}_{ssp_full_name}_{year}',
-    # scenarios=['ssp245'],
-    # years=[2050],
+    output_filename_pattern='{city}_{uhi}_{ssp}_{year}',
     scenario_mapping={'ssp245': 'SSP2-4.5'}
 )
-
-models = pyfwg.DEFAULT_GCMS
 
 workflow_direct.set_morphing_config(
     fwg_jar_path=jar_path,
