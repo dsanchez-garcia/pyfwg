@@ -3,11 +3,13 @@
 import os
 import shutil
 import logging
-from typing import List, Union, Optional, Dict, Any
+import subprocess
 import time
+from typing import List, Union, Optional, Dict, Any
 
-# Importa la clase del flujo de trabajo para usarla como motor interno
+# Import the workflow class to use it as an internal engine
 from .workflow import MorphingWorkflow
+
 
 def _robust_rmtree(path: str, max_retries: int = 5, delay: float = 0.5):
     """
@@ -19,9 +21,10 @@ def _robust_rmtree(path: str, max_retries: int = 5, delay: float = 0.5):
             shutil.rmtree(path)
             return
         except PermissionError:
-            logging.warning(f"PermissionError deleting {path}. Retrying in {delay}s... (Attempt {i+1}/{max_retries})")
+            logging.warning(f"PermissionError deleting {path}. Retrying in {delay}s... (Attempt {i + 1}/{max_retries})")
             time.sleep(delay)
     logging.error(f"Failed to delete directory {path} after {max_retries} retries.")
+
 
 def morph_epw(*,
               epw_paths: Union[str, List[str]],
@@ -31,7 +34,7 @@ def morph_epw(*,
               temp_base_dir: str = './morphing_temp_results',
               fwg_show_tool_output: bool = False,
               fwg_params: Optional[Dict[str, Any]] = None,
-              # --- Argumentos Explícitos de FutureWeatherGenerator ---
+              # --- Explicit FutureWeatherGenerator Arguments ---
               fwg_gcms: Optional[List[str]] = None, fwg_create_ensemble: bool = True,
               fwg_winter_sd_shift: float = 0.0, fwg_summer_sd_shift: float = 0.0,
               fwg_month_transition_hours: int = 72, fwg_use_multithreading: bool = True,
@@ -64,7 +67,7 @@ def morph_epw(*,
             FWG parameters. Any explicit `fwg_` argument will override this.
             Defaults to None.
 
-        (Todos los demás argumentos `fwg_` se explican en la clase MorphingWorkflow)
+        (All other `fwg_` arguments are explained in the MorphingWorkflow class)
 
     Returns:
         List[str]: A list of absolute paths to the successfully created .epw
@@ -75,15 +78,21 @@ def morph_epw(*,
     """
     logging.info("--- Starting Direct Morphing Process ---")
 
-    # --- 1. Usar la clase MorphingWorkflow internamente ---
+    # --- 1. Use the MorphingWorkflow class internally ---
     workflow = MorphingWorkflow()
 
-    # Normaliza la entrada para que siempre sea una lista
+    # Normalize the input to always be a list.
     epw_files = [epw_paths] if isinstance(epw_paths, str) else epw_paths
 
-    # --- 2. Configurar y Validar ---
-    # Llama a set_morphing_config para reutilizar toda la lógica de validación y
-    # construcción de parámetros.
+    # Manually populate the epw_categories attribute. This is the step that
+    # map_categories() would normally perform. For this simple function, we
+    # just need the file paths, with no complex categories.
+    workflow.epw_categories = {
+        os.path.abspath(path): {} for path in epw_files if os.path.exists(path)
+    }
+
+    # --- 2. Configure and Validate ---
+    # Call set_morphing_config to reuse all validation and parameter-building logic.
     workflow.set_morphing_config(
         fwg_jar_path=fwg_jar_path,
         delete_temp_files=delete_temp_files,
@@ -98,27 +107,24 @@ def morph_epw(*,
         fwg_add_uhi=fwg_add_uhi, fwg_epw_original_lcz=fwg_epw_original_lcz, fwg_target_uhi_lcz=fwg_target_uhi_lcz
     )
 
-    # Detener la ejecución si la validación falló
+    # Stop execution if validation failed.
     if not workflow.is_config_valid:
         raise ValueError("FWG parameter validation failed. Please check the warnings in the log above.")
 
-    # --- 3. Ejecutar el Morphing para cada archivo ---
+    # --- 3. Execute the Morphing for each file ---
     os.makedirs(output_dir, exist_ok=True)
     final_file_paths = []
 
-    for epw_path in epw_files:
-        if not os.path.exists(epw_path):
-            logging.warning(f"Input file not found, skipping: {epw_path}")
-            continue
-
+    # Use the now-correctly-populated list of files to be morphed.
+    for epw_path in workflow.epws_to_be_morphed:
         temp_epw_output_dir = os.path.join(workflow.inputs['temp_base_dir'], os.path.splitext(os.path.basename(epw_path))[0])
         os.makedirs(temp_epw_output_dir, exist_ok=True)
 
-        # Reutiliza el método de ejecución de bajo nivel de la clase
+        # Reuse the low-level execution method from the class.
         success = workflow._execute_single_morph(epw_path, temp_epw_output_dir)
 
         if success:
-            # Mueve los archivos .epw y .stat resultantes al directorio de salida final
+            # Move the resulting .epw and .stat files to the final output directory.
             for generated_file in os.listdir(temp_epw_output_dir):
                 if generated_file.endswith((".epw", ".stat")):
                     source_path = os.path.join(temp_epw_output_dir, generated_file)
@@ -126,7 +132,7 @@ def morph_epw(*,
                     shutil.move(source_path, dest_path)
                     final_file_paths.append(os.path.abspath(dest_path))
 
-            # Limpia el directorio temporal si se solicita
+            # Clean up the temporary directory if requested.
             if workflow.inputs['delete_temp_files']:
                 _robust_rmtree(temp_epw_output_dir)
 
