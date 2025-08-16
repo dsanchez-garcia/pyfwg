@@ -91,6 +91,10 @@ if workflow.is_config_valid:
     workflow.execute_morphing()
 ```
 
+## Acknowledgements
+
+This library would not be possible without the foundational work of **Eugénio Rodrigues (University of Coimbra)**, the creator of the [FutureWeatherGenerator tool](https://future-weather-generator.adai.pt/). `pyfwg` is essentially a Python wrapper designed to automate and streamline the use of his powerful command-line application.
+
 ## License
 
 This project is licensed under the GNU (GPLv3) License - see the [LICENSE](LICENSE) file for details.
