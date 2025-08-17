@@ -46,8 +46,12 @@ setup(
     },
 
     # --- Dependencias ---
-    # Si tuvieras dependencias externas, las añadirías aquí.
-    # install_requires=[
-    #     "numpy>=1.21",
-    # ],
+    # No hay dependencias de ejecución, pero sí de documentación
+    extras_require={
+        "docs": [
+            "sphinx",
+            "sphinx-rtd-theme",
+            "nbsphinx",
+        ]
+    },
 )

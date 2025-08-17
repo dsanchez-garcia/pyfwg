@@ -1,0 +1,24 @@
+# .readthedocs.yaml
+# Configuración para Read the Docs
+
+version: 2
+
+# Establece el sistema operativo y la versión de Python para construir la documentación
+build:
+  os: ubuntu-22.04
+  tools:
+    python: "3.9"
+
+# Configura cómo se construye la documentación de Sphinx
+sphinx:
+  configuration: docs/source/conf.py
+
+# Define los requisitos de Python para instalar
+python:
+  install:
+    - method: pip
+      # Instala la propia librería pyfwg en modo editable para que Sphinx pueda importarla
+      path: .
+      # Instala las dependencias específicas de la documentación
+      extra_requirements:
+        - docs
