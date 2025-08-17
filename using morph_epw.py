@@ -1,6 +1,6 @@
 from pyfwg import morph_epw
 
-jar_path = r"D:\OneDrive - Universidad de Cádiz (uca.es)\Programas\FutureWeatherGenerator_v3.0.0.jar"
+jar_path = r"D:\OneDrive - Universidad de Cádiz (uca.es)\Programas\FutureWeatherGenerator_v3.0.1.jar"
 epw_file = 'MAD_ICU_type-2.epw'
 
 # La validación se ejecuta automáticamente.

@@ -10,6 +10,16 @@ Welcome to pyfwg's documentation!
 
 This documentation provides detailed information on the two main interfaces of the library: the simple, one-shot `morph_epw` function for direct usage, and the powerful `MorphingWorkflow` class for complex, step-by-step projects.
 
+Requirements
+------------
+
+Before using `pyfwg`, you need to have the following installed and configured:
+
+* **Python 3.9+**
+* **Java**: The ``java`` command must be accessible from your system's terminal (i.e., it must be in your system's PATH).
+* **FutureWeatherGenerator**: You must download the tool's ``.jar`` file. This library has been tested with FutureWeatherGenerator **v3.0.0** and **v3.0.1**.
+    * `Download from the official website <https://future-weather-generator.adai.pt/>`_
+
 Acknowledgements
 ----------------
 

@@ -17,6 +17,15 @@ A robust, step-by-step Python workflow manager for the [FutureWeatherGenerator](
 - **Built-in Validation**: Automatically validates all `FutureWeatherGenerator` parameters before execution to catch typos and invalid values.
 - **Clear and Organized Output**: Automatically renames and organizes the final `.epw` and `.stat` files into a clean directory structure.
 
+## Requirements
+
+Before using `pyfwg`, you need to have the following installed and configured:
+
+*   **Python 3.9+**
+*   **Java**: The `java` command must be accessible from your system's terminal (i.e., it must be in your system's PATH).
+*   **FutureWeatherGenerator**: You must download the tool's `.jar` file. This library has been tested with FutureWeatherGenerator **v3.0.0** and **v3.0.1**.
+    *   [Download from the official website](https://future-weather-generator.adai.pt/)
+
 ## Installation
 
 You can install `pyfwg` directly from PyPI:
