@@ -12,8 +12,8 @@ setup(
     version="0.1.0",
 
     # --- Autores ---
-    author="Tu Nombre",
-    author_email="tu.email@example.com",
+    author="Daniel Sánchez-García",
+    author_email="daniel.sanchezgarcia@uca.es",
 
     # --- Descripciones ---
     description="A Python workflow manager for the FutureWeatherGenerator tool.",
@@ -32,7 +32,7 @@ setup(
     ],
 
     # --- Requisitos de Python ---
-    python_requires=">=3.8",
+    python_requires=">=3.9",
 
     # --- Dónde encontrar el código ---
     # Esto buscará automáticamente el paquete 'pyfwg' en tu proyecto.
@@ -40,9 +40,9 @@ setup(
     packages=find_packages(),
 
     # --- URLs del Proyecto ---
-    url="https://github.com/tu_usuario/pyfwg-project",
+    url="https://github.com/dsanchez-garcia/pyfwg",
     project_urls={
-        "Bug Tracker": "https://github.com/tu_usuario/pyfwg-project/issues",
+        "Bug Tracker": "https://github.com/dsanchez-garcia/pyfwg/issuespip install twine --upgrade",
     },
 
     # --- Dependencias ---
