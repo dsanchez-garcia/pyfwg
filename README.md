@@ -3,6 +3,7 @@
 [![PyPI version](https://badge.fury.io/py/pyfwg.svg)](https://badge.fury.io/py/pyfwg)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Documentation Status](https://readthedocs.org/projects/pyfwg/badge/?version=latest)](https://pyfwg.readthedocs.io/en/latest/?badge=latest)
+[![DOI](https://zenodo.org/badge/1039407242.svg)](https://doi.org/10.5281/zenodo.16908690)
 
 A robust, step-by-step Python workflow manager for the [FutureWeatherGenerator](https://future-weather-generator.adai.pt/) command-line tool.
 
