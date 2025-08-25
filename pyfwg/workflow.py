@@ -662,9 +662,17 @@ class MorphingWorkflow:
             formatted_params['uhi_combined']
         ]
 
+        # --- Build a separate, "printable" version of the command for logging ---
+        # This version is for display purposes only and shows the original source path.
+        display_command_list = command[:] # Create a copy
+        # Replace the temporary path with the original source path at the correct index (4).
+        display_command_list[4] = os.path.abspath(epw_path)
+        # Format the display list into a copy-pasteable string.
+        printable_command = ' '.join(f'"{arg}"' if ' ' in arg else arg for arg in display_command_list)
+
         # Print a detailed summary for the user before execution.
-        print("\n" + "-" * 20, f"Executing FWG for {os.path.basename(epw_path)}", "-" * 20)
-        print("  Full Command:", ' '.join(command))
+        print("\n" + "-"*20, f"Executing FWG for {os.path.basename(epw_path)}", "-"*20)
+        print("  Full Command:", printable_command)
 
         # Determine whether to show the tool's output live or capture it.
         show_output = self.inputs.get('show_tool_output', False)

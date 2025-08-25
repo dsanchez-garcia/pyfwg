@@ -9,7 +9,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 setup(
     # --- Información Esencial ---
     name="pyfwg",
-    version="0.1.0",
+    version="0.1.1",
 
     # --- Autores ---
     author="Daniel Sánchez-García",

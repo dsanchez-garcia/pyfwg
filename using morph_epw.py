@@ -9,10 +9,13 @@ created_files_custom = morph_epw(
     fwg_jar_path=jar_path,
     output_dir='./custom_output',
     fwg_show_tool_output=True,
+    delete_temp_files=False,
     fwg_gcms=['CanESM5'], # Usar solo dos GCMs
-    fwg_interpolation_method_id=2  # Usar el método "nearest point"
+    fwg_interpolation_method_id=2,  # Usar el método "nearest point"
+    fwg_epw_original_lcz=1,
+    fwg_target_uhi_lcz=1
 )
 
-print("Successfully created files:")
-for f in created_files_custom:
-    print(f)
+# print("Successfully created files:")
+# for f in created_files_custom:
+#     print(f)
