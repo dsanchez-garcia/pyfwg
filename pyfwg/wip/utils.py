@@ -6,7 +6,8 @@ import logging
 import subprocess
 import tempfile
 import time
-from typing import List, Union
+import re
+from typing import List, Union, Dict
 
 def _robust_rmtree(path: str, max_retries: int = 5, delay: float = 0.5):
     """A robust version of shutil.rmtree that retries on PermissionError."""
@@ -91,16 +92,16 @@ def check_lcz_availability(*,
                            epw_path: str,
                            original_lcz: int,
                            target_lcz: int,
-                           fwg_jar_path: str) -> Union[bool, List[str]]:
-    """Checks if the specified original and target Local Climate Zones (LCZs) are available for a given EPW file.
+                           fwg_jar_path: str) -> Union[bool, Dict[str, List]]:
+    """Checks if the specified original and target LCZs are available for a given EPW file.
 
-    This utility function internally calls `uhi_morph` in a temporary directory
-    to validate the LCZ pair. It's designed to be used as a pre-flight check
-    before running a full morphing workflow.
+    This utility function runs the `uhi_morph` tool once to validate the LCZ
+    pair. If the tool fails because an LCZ is unavailable, this function
+    intelligently parses the error message to determine which of the input
+    LCZs was invalid.
 
-    - If both LCZs are valid, the function returns `True`.
-    - If either LCZ is invalid, it captures the error message from the tool,
-      parses it, and returns a list of the available LCZ descriptions.
+    It is designed to be used as a pre-flight check before running a full
+    morphing workflow, providing precise feedback to the user.
 
     Args:
         epw_path (str): Path to the source EPW file to check.
@@ -109,17 +110,19 @@ def check_lcz_availability(*,
         fwg_jar_path (str): Path to the `FutureWeatherGenerator.jar` file.
 
     Returns:
-        Union[bool, List[str]]: `True` if both LCZs are available, otherwise a
-        list of strings describing the available LCZs for that location, or
-        `False` if an unexpected error occurred.
+        Union[bool, Dict[str, List]]:
+        - `True` if both LCZs are available.
+        - A dictionary with keys 'invalid_messages' (listing specific errors)
+          and 'available' (listing valid LCZ descriptions) if validation fails.
+        - `False` if an unexpected error occurs.
     """
     logging.info(f"Checking LCZ pair (Original: {original_lcz}, Target: {target_lcz}) availability for {os.path.basename(epw_path)}...")
 
-    # Use a temporary directory that is automatically cleaned up.
+    # Use a temporary directory that is automatically created and cleaned up.
     with tempfile.TemporaryDirectory() as temp_dir:
         try:
-            # Call uhi_morph with the specified LCZ pair.
-            # This will raise CalledProcessError on failure.
+            # Call uhi_morph once. It will raise CalledProcessError on failure,
+            # which we will catch and analyze.
             uhi_morph(
                 fwg_epw_path=epw_path,
                 fwg_jar_path=fwg_jar_path,
@@ -131,25 +134,57 @@ def check_lcz_availability(*,
             # If no exception was raised, the LCZ pair is valid.
             logging.info(f"LCZ pair (Original: {original_lcz}, Target: {target_lcz}) is available.")
             return True
+
         except subprocess.CalledProcessError as e:
             # If the tool failed, parse its output to find the available LCZs.
             output = e.stdout + e.stderr
-            available_lczs = []
+            available_lczs_full_text = []
+            available_lcz_numbers = set()
             start_parsing = False
+
+            # Iterate through the captured output line by line.
             for line in output.splitlines():
+                # The line "The LCZs available are:" is our trigger to start parsing.
                 if 'The LCZs available are:' in line:
                     start_parsing = True
                     continue
-                if start_parsing and 'LCZ' in line:
-                    available_lczs.append(line.strip())
 
-            if available_lczs:
-                logging.warning(f"One or both LCZs in the pair (Original: {original_lcz}, Target: {target_lcz}) are not available.")
-                return available_lczs
+                # Once triggered, look for lines containing LCZ information.
+                if start_parsing:
+                    # Use regex to safely extract the LCZ number from the line.
+                    match = re.search(r'LCZ (\d+)', line)
+                    if match:
+                        # Store the number for logical checks and the full text for display.
+                        available_lcz_numbers.add(int(match.group(1)))
+                        available_lczs_full_text.append(line.strip())
+
+            # If we successfully parsed the list of available LCZs, diagnose the problem.
+            if available_lczs_full_text:
+                invalid_lczs_messages = []
+
+                # Check which of the user's inputs are not in the valid set.
+                if original_lcz not in available_lcz_numbers:
+                    invalid_lczs_messages.append(f"The original LCZ '{original_lcz}' is not available.")
+
+                # Check the target LCZ only if it's different from the original.
+                if target_lcz not in available_lcz_numbers and original_lcz != target_lcz:
+                    invalid_lczs_messages.append(f"The target LCZ '{target_lcz}' is not available.")
+
+                # If both are the same and invalid, the message is simpler.
+                if original_lcz == target_lcz and original_lcz not in available_lcz_numbers:
+                    invalid_lczs_messages = [f"The specified LCZ '{original_lcz}' is not available."]
+
+                # Return a structured dictionary with the diagnosis.
+                return {
+                    "invalid_messages": invalid_lczs_messages,
+                    "available": available_lczs_full_text
+                }
             else:
-                # If the error was for a different reason, report it.
-                logging.error("An unexpected error occurred during LCZ check.")
+                # If the error was for a different, unexpected reason, report it.
+                logging.error("An unexpected error occurred during LCZ check. Could not parse available LCZs.")
+                logging.error(f"STDERR:\n{e.stderr}")
                 return False
+
         except Exception:
-            # Catch any other exceptions (e.g., Java not found, invalid LCZ value)
+            # Catch any other exceptions (e.g., Java not found, invalid user input).
             return False

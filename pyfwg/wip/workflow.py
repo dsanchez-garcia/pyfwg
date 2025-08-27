@@ -446,6 +446,11 @@ class _MorphingWorkflowBase:
         for a file, it is skipped with a detailed error message, and the workflow
         continues with the next file.
 
+        After each successful morphing operation, it processes the generated
+        files, moving and renaming the `.epw` and `.stat` files according to
+        the `rename_plan`. Finally, it handles the cleanup of temporary
+        directories if requested.
+
         Raises:
             RuntimeError: If `set_morphing_config()` has not been run first, or
                 if the configuration was found to be invalid during that step.
@@ -488,10 +493,14 @@ class _MorphingWorkflowBase:
                 # If validation fails (returns anything other than True), log the error and skip this file.
                 if lcz_validation_result is not True:
                     logging.error(f"LCZ validation failed for '{os.path.basename(epw_path)}'. This file will be skipped.")
-                    # If the function returned a list, it contains the available LCZs. Print them for the user.
-                    if isinstance(lcz_validation_result, list):
+                    # If the function returned a dictionary, it contains the detailed error messages.
+                    if isinstance(lcz_validation_result, dict):
+                        # Print the specific error messages (e.g., "The original LCZ '1' is not available.").
+                        for error_message in lcz_validation_result.get("invalid_messages", []):
+                            logging.error(error_message)
+                        # Print the list of available LCZs for the user's convenience.
                         logging.error("The following LCZs are available for this location:")
-                        for lcz in lcz_validation_result:
+                        for lcz in lcz_validation_result.get("available", []):
                             logging.error(f"- {lcz}")
                     continue  # Skip to the next EPW file in the loop.
 
