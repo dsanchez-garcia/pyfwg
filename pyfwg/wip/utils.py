@@ -1,0 +1,155 @@
+# pyfwg/utils.py
+
+import os
+import shutil
+import logging
+import subprocess
+import tempfile
+import time
+from typing import List, Union
+
+def _robust_rmtree(path: str, max_retries: int = 5, delay: float = 0.5):
+    """A robust version of shutil.rmtree that retries on PermissionError."""
+    for i in range(max_retries):
+        try:
+            shutil.rmtree(path)
+            return
+        except PermissionError:
+            logging.warning(f"PermissionError deleting {path}. Retrying in {delay}s... (Attempt {i + 1}/{max_retries})")
+            time.sleep(delay)
+    logging.error(f"Failed to delete directory {path} after {max_retries} retries.")
+
+def uhi_morph(*,
+              fwg_epw_path: str,
+              fwg_jar_path: str,
+              fwg_output_dir: str,
+              fwg_original_lcz: int,
+              fwg_target_lcz: int,
+              fwg_limit_variables: bool = True,
+              show_tool_output: bool = False):
+    """Applies only the Urban Heat Island (UHI) effect to an EPW file.
+
+    This function is a wrapper for the `futureweathergenerator.UHI_Morph` tool,
+    which modifies an EPW file to reflect the climate of a different Local
+    Climate Zone (LCZ) without applying future climate change scenarios.
+
+    Args:
+        fwg_epw_path (str): Path to the source EPW file.
+        fwg_jar_path (str): Path to the `FutureWeatherGenerator.jar` file.
+        fwg_output_dir (str): Directory where the final UHI-morphed file will be saved.
+        fwg_original_lcz (int): The LCZ of the original EPW file (1-17).
+        fwg_target_lcz (int): The target LCZ for which to calculate the UHI effect (1-17).
+        fwg_limit_variables (bool, optional): If True, bounds variables to their
+            physical limits. Defaults to True.
+        show_tool_output (bool, optional): If True, prints the tool's console
+            output in real-time. Defaults to False.
+
+    Raises:
+        ValueError: If LCZ values are out of range.
+        FileNotFoundError: If the 'java' command is not found.
+        subprocess.CalledProcessError: If the FWG tool returns an error.
+    """
+    logging.info(f"--- Applying UHI effect to {os.path.basename(fwg_epw_path)} ---")
+
+    if not 1 <= fwg_original_lcz <= 17: raise ValueError("'fwg_original_lcz' must be between 1 and 17.")
+    if not 1 <= fwg_target_lcz <= 17: raise ValueError("'fwg_target_lcz' must be between 1 and 17.")
+
+    os.makedirs(fwg_output_dir, exist_ok=True)
+
+    lcz_options = f"{fwg_original_lcz}:{fwg_target_lcz}"
+    command = [
+        'java', '-cp', fwg_jar_path, 'futureweathergenerator.UHI_Morph',
+        os.path.abspath(fwg_epw_path),
+        os.path.abspath(fwg_output_dir) + '/',
+        str(fwg_limit_variables).lower(),
+        lcz_options
+    ]
+
+    printable_command = ' '.join(f'"{arg}"' if ' ' in arg else arg for arg in command)
+    logging.info(f"Executing command: {printable_command}")
+
+    stdout_dest = None if show_tool_output else subprocess.PIPE
+    stderr_dest = None if show_tool_output else subprocess.PIPE
+
+    try:
+        subprocess.run(command, text=True, check=True, timeout=300, stdout=stdout_dest, stderr=stderr_dest)
+        logging.info("UHI effect applied successfully.")
+    except FileNotFoundError:
+        logging.error("Error: 'java' command not found. Please ensure Java is installed and in the system's PATH.")
+        raise
+    except subprocess.CalledProcessError as e:
+        logging.error("The UHI_Morph tool returned an error.")
+        if e.stdout: logging.error(f"STDOUT:\n{e.stdout}")
+        if e.stderr: logging.error(f"STDERR:\n{e.stderr}")
+        raise
+    except Exception as e:
+        logging.error(f"An unexpected error occurred: {e}")
+        raise
+
+
+def check_lcz_availability(*,
+                           epw_path: str,
+                           original_lcz: int,
+                           target_lcz: int,
+                           fwg_jar_path: str) -> Union[bool, List[str]]:
+    """Checks if the specified original and target Local Climate Zones (LCZs) are available for a given EPW file.
+
+    This utility function internally calls `uhi_morph` in a temporary directory
+    to validate the LCZ pair. It's designed to be used as a pre-flight check
+    before running a full morphing workflow.
+
+    - If both LCZs are valid, the function returns `True`.
+    - If either LCZ is invalid, it captures the error message from the tool,
+      parses it, and returns a list of the available LCZ descriptions.
+
+    Args:
+        epw_path (str): Path to the source EPW file to check.
+        original_lcz (int): The original LCZ number (1-17) you want to validate.
+        target_lcz (int): The target LCZ number (1-17) you want to validate.
+        fwg_jar_path (str): Path to the `FutureWeatherGenerator.jar` file.
+
+    Returns:
+        Union[bool, List[str]]: `True` if both LCZs are available, otherwise a
+        list of strings describing the available LCZs for that location, or
+        `False` if an unexpected error occurred.
+    """
+    logging.info(f"Checking LCZ pair (Original: {original_lcz}, Target: {target_lcz}) availability for {os.path.basename(epw_path)}...")
+
+    # Use a temporary directory that is automatically cleaned up.
+    with tempfile.TemporaryDirectory() as temp_dir:
+        try:
+            # Call uhi_morph with the specified LCZ pair.
+            # This will raise CalledProcessError on failure.
+            uhi_morph(
+                fwg_epw_path=epw_path,
+                fwg_jar_path=fwg_jar_path,
+                fwg_output_dir=temp_dir,
+                fwg_original_lcz=original_lcz,
+                fwg_target_lcz=target_lcz,
+                show_tool_output=False  # Always run silently for checks.
+            )
+            # If no exception was raised, the LCZ pair is valid.
+            logging.info(f"LCZ pair (Original: {original_lcz}, Target: {target_lcz}) is available.")
+            return True
+        except subprocess.CalledProcessError as e:
+            # If the tool failed, parse its output to find the available LCZs.
+            output = e.stdout + e.stderr
+            available_lczs = []
+            start_parsing = False
+            for line in output.splitlines():
+                if 'The LCZs available are:' in line:
+                    start_parsing = True
+                    continue
+                if start_parsing and 'LCZ' in line:
+                    available_lczs.append(line.strip())
+
+            if available_lczs:
+                logging.warning(f"One or both LCZs in the pair (Original: {original_lcz}, Target: {target_lcz}) are not available.")
+                return available_lczs
+            else:
+                # If the error was for a different reason, report it.
+                logging.error("An unexpected error occurred during LCZ check.")
+                return False
+        except Exception:
+            # Catch any other exceptions (e.g., Java not found, invalid LCZ value)
+            return False

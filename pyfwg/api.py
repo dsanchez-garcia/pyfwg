@@ -138,3 +138,80 @@ def morph_epw(*,
 
     logging.info(f"Direct morphing complete. {len(final_file_paths)} files created in {os.path.abspath(output_dir)}")
     return final_file_paths
+
+def uhi_morph(*,
+              fwg_epw_path: str,
+              fwg_jar_path: str,
+              fwg_output_dir: str,
+              fwg_original_lcz: int,
+              fwg_target_lcz: int,
+              fwg_limit_variables: bool = True,
+              show_tool_output: bool = False):
+    """Applies only the Urban Heat Island (UHI) effect to an EPW file.
+
+    This function is a wrapper for the `futureweathergenerator.UHI_Morph` tool,
+    which modifies an EPW file to reflect the climate of a different Local
+    Climate Zone (LCZ) without applying future climate change scenarios.
+
+    Args:
+        fwg_epw_path (str): Path to the source EPW file.
+        fwg_jar_path (str): Path to the `FutureWeatherGenerator.jar` file.
+        fwg_output_dir (str): Directory where the final UHI-morphed file will be saved.
+        fwg_original_lcz (int): The LCZ of the original EPW file (1-17).
+        fwg_target_lcz (int): The target LCZ for which to calculate the UHI effect (1-17).
+        fwg_limit_variables (bool, optional): If True, bounds variables to their
+            physical limits. Defaults to True.
+        show_tool_output (bool, optional): If True, prints the tool's console
+            output in real-time. Defaults to False.
+    """
+    logging.info(f"--- Applying UHI effect to {os.path.basename(fwg_epw_path)} ---")
+
+    # --- 1. Parameter Validation ---
+    # Check if the LCZ values are within the valid range.
+    if not 1 <= fwg_original_lcz <= 17:
+        raise ValueError("'fwg_original_lcz' must be between 1 and 17.")
+    if not 1 <= fwg_target_lcz <= 17:
+        raise ValueError("'fwg_target_lcz' must be between 1 and 17.")
+
+    # Ensure the output directory exists.
+    os.makedirs(fwg_output_dir, exist_ok=True)
+
+    # --- 2. Command Construction ---
+    # Create the composite LCZ argument string (e.g., "14:2").
+    lcz_options = f"{fwg_original_lcz}:{fwg_target_lcz}"
+
+    # Build the command as a list of strings for robust execution.
+    command = [
+        'java', '-cp', fwg_jar_path, 'futureweathergenerator.UHI_Morph',
+        os.path.abspath(fwg_epw_path),
+        os.path.abspath(fwg_output_dir) + '/',
+        str(fwg_limit_variables).lower(),
+        lcz_options
+    ]
+
+    # Create a user-friendly, copy-pasteable version of the command for logging.
+    printable_command = ' '.join(f'"{arg}"' if ' ' in arg else arg for arg in command)
+    logging.info(f"Executing command: {printable_command}")
+
+    # --- 3. Subprocess Execution ---
+    # Determine whether to show the tool's output live or capture it.
+    stdout_dest = None if show_tool_output else subprocess.PIPE
+    stderr_dest = None if show_tool_output else subprocess.PIPE
+
+    try:
+        # Run the command.
+        subprocess.run(command, text=True, check=True, timeout=300, stdout=stdout_dest, stderr=stderr_dest)
+        logging.info("UHI effect applied successfully.")
+    except FileNotFoundError:
+        logging.error("Error: 'java' command not found. Please ensure Java is installed and in the system's PATH.")
+        raise
+    except subprocess.CalledProcessError as e:
+        # Handle errors from the Java tool itself.
+        logging.error("The UHI_Morph tool returned an error.")
+        if e.stdout: logging.error(f"STDOUT:\n{e.stdout}")
+        if e.stderr: logging.error(f"STDERR:\n{e.stderr}")
+        raise
+    except Exception as e:
+        # Handle other potential errors.
+        logging.error(f"An unexpected error occurred: {e}")
+        raise
