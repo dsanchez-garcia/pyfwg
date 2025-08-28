@@ -66,11 +66,11 @@ epw_file = 'Seville_Present.epw'
 created_files_custom = pyfwg.morph_epw_europe(
     epw_paths=epw_file,
     fwg_jar_path=jar_path,
-    output_dir='./custom_output_4',
+    output_dir='./custom_output_5',
     fwg_show_tool_output=True,
     delete_temp_files=False,
     fwg_rcm_pairs=['ICHEC_EC_EARTH_SMHI_RCA4'], # Usar solo dos GCMs
     fwg_interpolation_method_id=2,  # Usar el método "nearest point"
     fwg_epw_original_lcz=2,
-    fwg_target_uhi_lcz=2
+    fwg_target_uhi_lcz=3
 )

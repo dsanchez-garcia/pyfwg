@@ -139,7 +139,8 @@ def morph_epw_global(*,
                 epw_path=epw_path,
                 original_lcz=fwg_params.get('epw_original_lcz'),
                 target_lcz=fwg_params.get('target_uhi_lcz'),
-                fwg_jar_path=workflow.inputs['fwg_jar_path']
+                fwg_jar_path=workflow.inputs['fwg_jar_path'],
+                java_class_path_prefix='futureweathergenerator'
             )
             # If validation fails, log the detailed error and skip this file.
             if lcz_validation_result is not True:
@@ -294,7 +295,9 @@ def morph_epw_europe(*,
                 epw_path=epw_path,
                 original_lcz=fwg_params.get('epw_original_lcz'),
                 target_lcz=fwg_params.get('target_uhi_lcz'),
-                fwg_jar_path=workflow.inputs['fwg_jar_path']
+                fwg_jar_path=workflow.inputs['fwg_jar_path'],
+                java_class_path_prefix='futureweathergenerator_europe'
+
             )
             # If validation fails, log the detailed error and skip this file.
             if lcz_validation_result is not True:
