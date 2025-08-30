@@ -16,21 +16,25 @@ except ImportError:
     # Fallback for older Python versions
     import importlib_resources as resources
 
-
 def copy_tutorials(dest_dir: str = './pyfwg_tutorials'):
-    """Copies the example Jupyter notebooks included with the library to a local directory.
+    """Copies the example Jupyter notebooks and their required data files to a local directory.
 
     This function provides a convenient way for users to access the tutorial
-    files that are bundled with the installed package. It finds the notebooks
-    within the package's `tutorials` subfolder and copies them to a
-    user-specified location, making them easy to open and run.
+    files that are bundled with the installed package. It finds all content
+    (notebooks, data folders, etc.) within the package's `tutorials`
+    subfolder and copies it to a user-specified location, making the examples
+    fully functional and ready to run.
+
+    It intelligently copies both individual files and entire subdirectories,
+    while automatically excluding Python-specific files like `__init__.py` and
+    `__pycache__` directories from all levels of the copy.
 
     If the destination directory does not exist, it will be created.
 
     Args:
         dest_dir (str, optional): The path to the destination folder where
-            the notebooks will be copied. Defaults to './pyfwg_tutorials' in
-            the current working directory.
+            the tutorials and data will be copied. Defaults to './pyfwg_tutorials'
+            in the current working directory.
     """
     # Define the source sub-package containing the tutorials.
     source_package = 'pyfwg.tutorials'
@@ -38,11 +42,9 @@ def copy_tutorials(dest_dir: str = './pyfwg_tutorials'):
     try:
         # Use `importlib.resources.files` to get a traversable object
         # representing the source package. This is the modern and robust
-        # way to access package data, working for both editable installs
-        # and standard site-packages installations.
+        # way to access package data.
         source_path_obj = resources.files(source_package)
     except (ModuleNotFoundError, AttributeError):
-        # Handle cases where the tutorials might be missing or for very old Python versions.
         logging.error(f"Could not find the tutorials sub-package '{source_package}'. The package might be corrupted.")
         return
 
@@ -51,20 +53,42 @@ def copy_tutorials(dest_dir: str = './pyfwg_tutorials'):
 
     logging.info(f"Copying tutorials to '{os.path.abspath(dest_dir)}'...")
 
-    # Iterate through all files within the source package.
-    for file_name in source_path_obj.iterdir():
-        # We are only interested in copying the Jupyter Notebook files.
-        if file_name.name.endswith('.ipynb'):
-            # Construct the full destination path.
-            dest_path = os.path.join(dest_dir, file_name.name)
+    # --- Define patterns to ignore during the copy process ---
+    # This uses a helper from shutil to create an ignore function that
+    # will be passed to copytree. It excludes these files/dirs at all levels.
+    ignore_patterns = shutil.ignore_patterns('__init__.py', '__pycache__')
 
-            # `importlib.resources` provides a context manager to safely
-            # access the file's path on the filesystem, whether it's in a
-            # zip file or a regular directory.
-            with resources.as_file(file_name) as source_file_path:
-                # Copy the file from its source location to the user's directory.
-                shutil.copy2(source_file_path, dest_path)
-                logging.info(f"  - Copied {file_name.name}")
+    # Iterate through all items (files and directories) within the source package.
+    for source_item in source_path_obj.iterdir():
+        item_name = source_item.name
+
+        # --- Top-level Exclusion Filter ---
+        # This is a redundant but safe check for the top-level items.
+        if item_name in ("__init__.py", "__pycache__"):
+            continue
+
+        # Construct the full destination path for the item.
+        dest_path = os.path.join(dest_dir, item_name)
+
+        # Use `importlib.resources.as_file` to get a temporary, real filesystem
+        # path for the source item, whether it's in a zip or a regular directory.
+        with resources.as_file(source_item) as source_item_path:
+            # --- Logic to handle both files and directories ---
+            if os.path.isdir(source_item_path):
+                # If the item is a directory, copy the entire directory tree,
+                # applying the ignore patterns recursively.
+                # `dirs_exist_ok=True` allows the function to be re-run without errors.
+                shutil.copytree(
+                    source_item_path,
+                    dest_path,
+                    dirs_exist_ok=True,
+                    ignore=ignore_patterns
+                )
+                logging.info(f"  - Copied directory: {item_name}")
+            else:
+                # If the item is a file, copy it directly.
+                shutil.copy2(source_item_path, dest_path)
+                logging.info(f"  - Copied file: {item_name}")
 
     logging.info("Tutorials copied successfully.")
 

@@ -1,3 +1,15 @@
+# MANIFEST.in
+
+# Include the main documentation files in the source distribution.
 include README.md
 include LICENSE
-recursive-include pyfwg/tutorials *.ipynb
+
+# --- Include ALL files within the tutorials directory ---
+# The wildcard '*' ensures that subdirectories, .ipynb, .epw, and any other
+# necessary files are included in the package.
+recursive-include pyfwg/tutorials *
+
+# --- Explicitly exclude the 'wip' directory ---
+# This is a robust rule that tells the build system to prune (remove)
+# the entire 'wip' directory and all its contents from the source distribution.
+recursive-exclude pyfwg/wip *
