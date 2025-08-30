@@ -74,6 +74,9 @@ __version__ = "0.2.0"
 # This makes them accessible as `pyfwg.MorphingWorkflowGlobal`.
 from .workflow import MorphingWorkflowGlobal, MorphingWorkflowEurope
 
+# Import the iterator class for running multiple morphing scenarios.
+from .iterator import MorphingIterator
+
 # Import the high-level convenience functions for direct, one-shot usage.
 # This makes them accessible as `pyfwg.morph_epw_global`.
 from .api import morph_epw_global, morph_epw_europe

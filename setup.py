@@ -85,5 +85,11 @@ setup(
             "sphinx-rtd-theme",
             "nbsphinx",
         ],
+        "iterator": ["pandas"],
+        # Define un extra 'all' que instala todo
+        "all": [
+            "colorlog",
+            "pandas",
+        ]
     },
 )
