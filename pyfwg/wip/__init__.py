@@ -80,7 +80,7 @@ from .api import morph_epw_global, morph_epw_europe
 
 # Import utility functions that are useful for users, such as pre-flight checks.
 # This makes them accessible as `pyfwg.check_lcz_availability`.
-from .utils import uhi_morph, check_lcz_availability
+from .utils import uhi_morph, check_lcz_availability, copy_tutorials
 
 # Expose important constants so users can easily access lists of valid models and scenarios.
 # This makes them accessible as `pyfwg.DEFAULT_GLOBAL_GCMS`.

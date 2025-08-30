@@ -9,6 +9,64 @@ import time
 import re
 from typing import List, Union, Dict
 
+# Import the modern way to access package data (Python 3.9+)
+try:
+    from importlib import resources
+except ImportError:
+    # Fallback for older Python versions
+    import importlib_resources as resources
+
+
+def copy_tutorials(dest_dir: str = './pyfwg_tutorials'):
+    """Copies the example Jupyter notebooks included with the library to a local directory.
+
+    This function provides a convenient way for users to access the tutorial
+    files that are bundled with the installed package. It finds the notebooks
+    within the package's `tutorials` subfolder and copies them to a
+    user-specified location, making them easy to open and run.
+
+    If the destination directory does not exist, it will be created.
+
+    Args:
+        dest_dir (str, optional): The path to the destination folder where
+            the notebooks will be copied. Defaults to './pyfwg_tutorials' in
+            the current working directory.
+    """
+    # Define the source sub-package containing the tutorials.
+    source_package = 'pyfwg.tutorials'
+
+    try:
+        # Use `importlib.resources.files` to get a traversable object
+        # representing the source package. This is the modern and robust
+        # way to access package data, working for both editable installs
+        # and standard site-packages installations.
+        source_path_obj = resources.files(source_package)
+    except (ModuleNotFoundError, AttributeError):
+        # Handle cases where the tutorials might be missing or for very old Python versions.
+        logging.error(f"Could not find the tutorials sub-package '{source_package}'. The package might be corrupted.")
+        return
+
+    # Create the destination directory if it doesn't already exist.
+    os.makedirs(dest_dir, exist_ok=True)
+
+    logging.info(f"Copying tutorials to '{os.path.abspath(dest_dir)}'...")
+
+    # Iterate through all files within the source package.
+    for file_name in source_path_obj.iterdir():
+        # We are only interested in copying the Jupyter Notebook files.
+        if file_name.name.endswith('.ipynb'):
+            # Construct the full destination path.
+            dest_path = os.path.join(dest_dir, file_name.name)
+
+            # `importlib.resources` provides a context manager to safely
+            # access the file's path on the filesystem, whether it's in a
+            # zip file or a regular directory.
+            with resources.as_file(file_name) as source_file_path:
+                # Copy the file from its source location to the user's directory.
+                shutil.copy2(source_file_path, dest_path)
+                logging.info(f"  - Copied {file_name.name}")
+
+    logging.info("Tutorials copied successfully.")
 
 def _robust_rmtree(path: str, max_retries: int = 5, delay: float = 0.5):
     """(Private) A robust version of shutil.rmtree that retries on PermissionError.

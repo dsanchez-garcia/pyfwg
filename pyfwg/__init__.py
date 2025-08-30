@@ -1,6 +1,6 @@
 # pyfwg/__init__.py
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 # Importa la clase principal para el flujo de trabajo avanzado
 from .workflow import MorphingWorkflow
