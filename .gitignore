@@ -61,6 +61,3 @@ venv.bak/
 .idea/
 .vscode/
 *.swp
-
-# Local distribution archives
-previous_dist/
