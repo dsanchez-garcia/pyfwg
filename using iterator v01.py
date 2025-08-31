@@ -1,6 +1,7 @@
 import pandas as pd
 import os
-from pyfwg.wip import MorphingIterator, MorphingWorkflowGlobal
+from pyfwg.wip import MorphingWorkflowGlobal
+from pyfwg.wip.iterator_v01 import MorphingIterator
 
 # --- 1. Initialize the iterator ---
 # We specify that we want to use the Global tool for all runs.
@@ -25,6 +26,8 @@ iterator.set_default_values(
     fwg_jar_path=r"D:\OneDrive - Universidad de Cádiz (uca.es)\Programas\FutureWeatherGenerator_v3.0.1.jar",
     keyword_mapping=mapping_rules,
     output_filename_pattern='{city}_{uhi}_interp-{fwg_interpolation_method_id}_{ssp}_{year}',
+    fwg_epw_original_lcz=2,
+    fwg_target_uhi_lcz=3
 )
 
 # --- 3. Get the template and define the scenarios ---
