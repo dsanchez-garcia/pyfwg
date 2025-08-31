@@ -10,12 +10,53 @@ from .workflow import _MorphingWorkflowBase
 
 
 class MorphingIterator:
-    """Automates running multiple morphing scenarios from a structured input."""
+    """Automates running multiple morphing scenarios from a structured input.
+
+    This class is designed to perform parametric analysis by iterating over
+    different sets of parameters for a given morphing workflow. It takes a
+    Pandas DataFrame as input, where each row represents a unique morphing
+    run and each column corresponds to a parameter of the workflow.
+
+    The typical usage is:
+    1. Instantiate the iterator with the desired workflow class.
+    2. (Optional) Use `set_default_values()` to define common parameters for all runs.
+    3. Use `get_template_dataframe()` to get a blank DataFrame.
+    4. Populate the DataFrame with the parameters that change between scenarios.
+    5. (Optional) Call `apply_defaults()` to get a complete view of the final execution plan.
+    6. Call `run_from_dataframe()` to execute all the runs.
+    """
 
     def __init__(self, workflow_class: Type[_MorphingWorkflowBase]):
-        """Initializes the iterator with a specific workflow class."""
+        """Initializes the iterator with a specific workflow class.
+
+        Args:
+            workflow_class (Type[_MorphingWorkflowBase]): The workflow class to
+                be used for the iterations (e.g., `MorphingWorkflowGlobal` or
+                `MorphingWorkflowEurope`).
+        """
         self.workflow_class = workflow_class
+        # This dictionary will store the user-defined defaults for the batch run.
+        self.custom_defaults: Dict[str, Any] = {}
         logging.info(f"MorphingIterator initialized for {workflow_class.__name__}.")
+
+    def set_default_values(self, **kwargs):
+        """Sets default parameter values for all scenarios in the batch run.
+
+        Any parameter set here will be used for every row in the DataFrame
+        unless a different value is specified in the row itself. This is useful
+        for defining common parameters like `fwg_jar_path`.
+
+        The priority of parameters is:
+        1. (Lowest) Hardcoded defaults from the workflow class.
+        2. (Medium) Defaults set with this method.
+        3. (Highest) Values specified in the scenario DataFrame.
+
+        Args:
+            **kwargs: Keyword arguments corresponding to the parameters of the
+                workflow's `configure_and_preview` method.
+        """
+        self.custom_defaults = kwargs
+        logging.info(f"Custom default values have been set for the iterator: {kwargs}")
 
     def get_template_dataframe(self) -> pd.DataFrame:
         """Generates an empty Pandas DataFrame with the correct parameter columns."""
@@ -28,48 +69,38 @@ class MorphingIterator:
         return pd.DataFrame(columns=final_columns)
 
     def apply_defaults(self, scenarios_df: pd.DataFrame) -> pd.DataFrame:
-        """Fills missing values in a scenario DataFrame with the workflow's defaults.
+        """Fills missing values in a scenario DataFrame with the defined defaults.
 
-        This method takes a user-provided DataFrame, which may have empty (NaN)
-        cells, and fills them with the default values defined in the
-        workflow's `configure_and_preview` method.
-
-        It uses a robust `.apply()` method to fill values, which avoids
-        FutureWarnings related to downcasting in Pandas.
+        This method applies defaults in the correct priority order: first the
+        custom defaults set via `set_default_values`, and then the hardcoded
+        defaults from the workflow class for any remaining empty cells.
 
         Args:
-            scenarios_df (pd.DataFrame): The user's DataFrame of scenarios,
-                potentially with missing values.
+            scenarios_df (pd.DataFrame): The user's DataFrame of scenarios.
 
         Returns:
             pd.DataFrame: A new DataFrame with all default values applied.
         """
         logging.info("Applying default values to the scenario DataFrame...")
 
-        # Get the signature of the target configuration method.
         sig = inspect.signature(self.workflow_class.configure_and_preview)
-
-        # Create a dictionary of {parameter_name: default_value} for all
-        # parameters that have a default.
-        default_values = {
+        hardcoded_defaults = {
             p.name: p.default
             for p in sig.parameters.values()
             if p.default is not inspect.Parameter.empty
         }
 
-        # Create a copy of the DataFrame to avoid modifying the original.
+        # --- Priority Logic ---
+        # 1. Start with the lowest priority defaults (hardcoded in the class).
+        final_defaults = hardcoded_defaults.copy()
+        # 2. Update with the medium priority defaults (set by the user for the iterator).
+        final_defaults.update(self.custom_defaults)
+
         completed_df = scenarios_df.copy()
 
-        # Iterate through the parameters that have default values.
-        for col, default_val in default_values.items():
-            # Only attempt to fill the column if a default value actually exists (is not None).
+        for col, default_val in final_defaults.items():
             if col in completed_df.columns and default_val is not None:
-                # --- FUTUREWARNING FIX IS HERE ---
-                # Use the .apply() method for all columns. This is a robust,
-                # future-proof way to fill missing values without triggering
-                # Pandas' downcasting FutureWarning, which occurs with .fillna().
-                # It checks each cell individually: if the cell is null
-                # (NaN or None), it's replaced with the default value.
+                # Use the robust .apply() method to fill missing values.
                 completed_df[col] = completed_df[col].apply(
                     lambda x: default_val if pd.isnull(x) else x
                 )
@@ -84,14 +115,20 @@ class MorphingIterator:
         for index, row in scenarios_df.iterrows():
             logging.info(f"--- Running Scenario {index + 1}/{len(scenarios_df)} ---")
 
-            run_params = row.dropna().to_dict()
+            # --- Priority Logic for Execution ---
+            # 1. Start with the custom defaults set for the iterator.
+            run_params = self.custom_defaults.copy()
+            # 2. Get the specific values from the current row, dropping any NaNs.
+            row_params = row.dropna().to_dict()
+            # 3. Update the defaults with the row-specific values, which take highest priority.
+            run_params.update(row_params)
 
             epw_paths = run_params.pop('epw_paths', None)
             input_pattern = run_params.pop('input_filename_pattern', None)
             keyword_map = run_params.pop('keyword_mapping', None)
 
             if not epw_paths:
-                logging.error(f"Scenario {index + 1} skipped: 'epw_paths' column is missing or empty.")
+                logging.error(f"Scenario {index + 1} skipped: 'epw_paths' is missing.")
                 continue
 
             epw_files = [epw_paths] if isinstance(epw_paths, str) else epw_paths
@@ -103,11 +140,13 @@ class MorphingIterator:
                     input_filename_pattern=input_pattern,
                     keyword_mapping=keyword_map
                 )
+                # The hardcoded defaults are handled automatically by the method signature.
                 workflow.configure_and_preview(**run_params)
+
                 if workflow.is_config_valid:
                     workflow.execute_morphing()
                 else:
-                    logging.error(f"Scenario {index + 1} skipped due to invalid configuration. Please check warnings above.")
+                    logging.error(f"Scenario {index + 1} skipped due to invalid configuration.")
 
             except Exception as e:
                 logging.error(f"An unexpected error occurred in scenario {index + 1}: {e}")
