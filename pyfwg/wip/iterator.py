@@ -34,8 +34,8 @@ class MorphingIterator:
         cells, and fills them with the default values defined in the
         workflow's `configure_and_preview` method.
 
-        It uses a robust hybrid approach to handle columns with complex objects
-        (like lists) safely.
+        It uses a robust `.apply()` method to fill values, which avoids
+        FutureWarnings related to downcasting in Pandas.
 
         Args:
             scenarios_df (pd.DataFrame): The user's DataFrame of scenarios,
@@ -62,23 +62,17 @@ class MorphingIterator:
 
         # Iterate through the parameters that have default values.
         for col, default_val in default_values.items():
-            # --- BUG FIX IS HERE ---
             # Only attempt to fill the column if a default value actually exists (is not None).
             if col in completed_df.columns and default_val is not None:
-                # Check if the default value is a list-like object. These
-                # columns have a dtype of 'object' and can cause issues with
-                # the standard .fillna() method.
-                if isinstance(default_val, (list, tuple, dict)):
-                    # For these complex columns, use a safer .apply() method.
-                    # It checks each cell individually: if the cell is null
-                    # (NaN or None), it's replaced with the default value.
-                    completed_df[col] = completed_df[col].apply(
-                        lambda x: default_val if pd.isnull(x) else x
-                    )
-                else:
-                    # For simple scalar columns (strings, numbers, booleans),
-                    # the standard, fast .fillna() method is safe and efficient.
-                    completed_df[col] = completed_df[col].fillna(default_val)
+                # --- FUTUREWARNING FIX IS HERE ---
+                # Use the .apply() method for all columns. This is a robust,
+                # future-proof way to fill missing values without triggering
+                # Pandas' downcasting FutureWarning, which occurs with .fillna().
+                # It checks each cell individually: if the cell is null
+                # (NaN or None), it's replaced with the default value.
+                completed_df[col] = completed_df[col].apply(
+                    lambda x: default_val if pd.isnull(x) else x
+                )
 
         logging.info("Default values applied successfully.")
         return completed_df
