@@ -41,7 +41,6 @@ epw_files = [os.path.join(epw_files_dir, f) for f in os.listdir(epw_files_dir)]
 available_lczs = get_available_lczs(
     epw_paths=epw_files,
     fwg_jar_path=r"D:\OneDrive - Universidad de Cádiz (uca.es)\Programas\FutureWeatherGenerator_v3.0.1.jar",
-    java_class_path_prefix='futureweathergenerator'  # Especifica la herramienta global
 )
 
 ## --- Scenario 1: Run the first EPW file with one set of GCMs ---
