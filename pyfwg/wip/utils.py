@@ -158,8 +158,8 @@ def uhi_morph(*,
     logging.info(f"--- Applying UHI effect to {os.path.basename(fwg_epw_path)} ---")
 
     # --- 1. Parameter Validation ---
-    if not 1 <= fwg_original_lcz <= 17: raise ValueError("'fwg_original_lcz' must be between 1 and 17.")
-    if not 1 <= fwg_target_lcz <= 17: raise ValueError("'fwg_target_lcz' must be between 1 and 17.")
+    # if not 1 <= fwg_original_lcz <= 17: raise ValueError("'fwg_original_lcz' must be between 1 and 17.")
+    # if not 1 <= fwg_target_lcz <= 17: raise ValueError("'fwg_target_lcz' must be between 1 and 17.")
 
     # Ensure the output directory exists.
     os.makedirs(fwg_output_dir, exist_ok=True)
@@ -312,3 +312,68 @@ def check_lcz_availability(*,
         except Exception:
             # Catch any other exceptions (e.g., Java not found, invalid user input).
             return False
+
+
+def get_available_lczs(*,
+                       epw_paths: Union[str, List[str]],
+                       fwg_jar_path: str,
+                       java_class_path_prefix: str) -> Dict[str, List[int]]:
+    """Gets the available Local Climate Zones (LCZs) for one or more EPW files.
+
+    This utility function iterates through a list of EPW files and runs a
+    check to determine which LCZs are available for morphing at each location.
+    It reuses the `check_lcz_availability` function by intentionally probing
+    with an invalid LCZ to trigger the error that lists all available zones.
+
+    Args:
+        epw_paths (Union[str, List[str]]): A single path or a list of paths
+            to the EPW files to be checked.
+        fwg_jar_path (str): Path to the `FutureWeatherGenerator.jar` file.
+        java_class_path_prefix (str): The Java package prefix for the tool
+            (e.g., 'futureweathergenerator' or 'futureweathergenerator_europe').
+
+    Returns:
+        Dict[str, List[int]]: A dictionary where keys are the EPW filenames
+        and values are sorted lists of the available LCZ numbers (as integers).
+        If a file cannot be processed, its value will be an empty list.
+    """
+    logging.info(f"--- Fetching available LCZs for {len(epw_paths)} EPW file(s) ---")
+
+    # Normalize the input to always be a list.
+    epw_files = [epw_paths] if isinstance(epw_paths, str) else epw_paths
+
+    results = {}
+
+    # Iterate through each provided EPW file path.
+    for epw_path in epw_files:
+        filename = os.path.basename(epw_path)
+
+        # Call the check function with an invalid LCZ (0) to force it to
+        # return the list of available zones.
+        validation_result = check_lcz_availability(
+            epw_path=epw_path,
+            original_lcz=0,  # Use an invalid LCZ to trigger the listing
+            target_lcz=0,
+            fwg_jar_path=fwg_jar_path,
+            java_class_path_prefix=java_class_path_prefix
+        )
+
+        # If the result is a dictionary, it contains the data we need.
+        if isinstance(validation_result, dict):
+            available_lczs_text = validation_result.get("available", [])
+            lcz_numbers = []
+            # Parse the full text lines to extract just the numbers.
+            for line in available_lczs_text:
+                match = re.search(r'LCZ (\d+)', line)
+                if match:
+                    lcz_numbers.append(int(match.group(1)))
+
+            # Store the sorted list of numbers.
+            results[filename] = sorted(lcz_numbers)
+        else:
+            # If the check succeeded (shouldn't happen with LCZ 0) or failed
+            # unexpectedly, return an empty list for this file.
+            logging.error(f"Could not retrieve LCZ list for '{filename}'.")
+            results[filename] = []
+
+    return results

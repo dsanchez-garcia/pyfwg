@@ -75,7 +75,7 @@ __version__ = "0.2.0"
 from .workflow import MorphingWorkflowGlobal, MorphingWorkflowEurope
 
 # Import the iterator class for running multiple morphing scenarios.
-from .iterator_v02 import MorphingIterator
+from .iterator_v05 import MorphingIterator
 
 # Import the high-level convenience functions for direct, one-shot usage.
 # This makes them accessible as `pyfwg.morph_epw_global`.
@@ -83,7 +83,7 @@ from .api import morph_epw_global, morph_epw_europe
 
 # Import utility functions that are useful for users, such as pre-flight checks.
 # This makes them accessible as `pyfwg.check_lcz_availability`.
-from .utils import uhi_morph, check_lcz_availability, copy_tutorials
+from .utils import uhi_morph, check_lcz_availability, copy_tutorials, get_available_lczs
 
 # Expose important constants so users can easily access lists of valid models and scenarios.
 # This makes them accessible as `pyfwg.DEFAULT_GLOBAL_GCMS`.
