@@ -8,6 +8,8 @@ import tempfile
 import time
 import re
 from typing import List, Union, Dict
+import ast
+import pandas as pd
 
 # Import the modern way to access package data (Python 3.9+)
 try:
@@ -131,81 +133,33 @@ def uhi_morph(*,
               show_tool_output: bool = False):
     """Applies only the Urban Heat Island (UHI) effect to an EPW file.
 
-    This function is a direct wrapper for the `UHI_Morph` class within the
-    FutureWeatherGenerator tool. It modifies an EPW file to reflect the
-    climate of a different Local Climate Zone (LCZ) without applying future
-    climate change scenarios.
-
-    Args:
-        fwg_epw_path (str): Path to the source EPW file.
-        fwg_jar_path (str): Path to the `FutureWeatherGenerator.jar` file.
-        fwg_output_dir (str): Directory where the final UHI-morphed file will be saved.
-        fwg_original_lcz (int): The LCZ of the original EPW file (1-17).
-        fwg_target_lcz (int): The target LCZ for which to calculate the UHI effect (1-17).
-        java_class_path_prefix (str): The Java package prefix, which differs
-            between tool versions (e.g., 'futureweathergenerator' or
-            'futureweathergenerator_europe').
-        fwg_limit_variables (bool, optional): If True, bounds variables to their
-            physical limits. Defaults to True.
-        show_tool_output (bool, optional): If True, prints the tool's console
-            output in real-time. Defaults to False.
-
-    Raises:
-        ValueError: If LCZ values are out of the valid range (1-17).
-        FileNotFoundError: If the 'java' command is not found.
-        subprocess.CalledProcessError: If the FWG tool returns a non-zero exit code.
+    This function is a direct wrapper for the `UHI_Morph` class. It is
+    designed to "fail fast" by raising an exception if the external tool
+    encounters any error, allowing the calling function to handle the error.
     """
     logging.info(f"--- Applying UHI effect to {os.path.basename(fwg_epw_path)} ---")
 
-    # --- 1. Parameter Validation ---
-    # if not 1 <= fwg_original_lcz <= 17: raise ValueError("'fwg_original_lcz' must be between 1 and 17.")
-    # if not 1 <= fwg_target_lcz <= 17: raise ValueError("'fwg_target_lcz' must be between 1 and 17.")
-
-    # Ensure the output directory exists.
     os.makedirs(fwg_output_dir, exist_ok=True)
-
-    # --- 2. Command Construction ---
-    # Create the composite LCZ argument string (e.g., "14:2").
     lcz_options = f"{fwg_original_lcz}:{fwg_target_lcz}"
-
-    # Dynamically build the full Java class path using the provided prefix.
     class_path = f"{java_class_path_prefix}.UHI_Morph"
+    command = ['java', '-cp', fwg_jar_path, class_path, os.path.abspath(fwg_epw_path), os.path.abspath(fwg_output_dir) + '/', str(fwg_limit_variables).lower(), lcz_options]
 
-    # Build the command as a list of strings for robust execution.
-    command = [
-        'java', '-cp', fwg_jar_path, class_path,
-        os.path.abspath(fwg_epw_path),
-        os.path.abspath(fwg_output_dir) + '/',
-        str(fwg_limit_variables).lower(),
-        lcz_options
-    ]
-
-    # Create a user-friendly, copy-pasteable version of the command for logging.
     printable_command = ' '.join(f'"{arg}"' if ' ' in arg else arg for arg in command)
     logging.info(f"Executing command: {printable_command}")
 
-    # --- 3. Subprocess Execution ---
-    # Determine whether to show the tool's output live or capture it.
     stdout_dest = None if show_tool_output else subprocess.PIPE
     stderr_dest = None if show_tool_output else subprocess.PIPE
 
     try:
-        # Run the command. The `check=True` flag will cause it to raise
-        # CalledProcessError if the Java program returns a non-zero exit code.
         subprocess.run(command, text=True, check=True, timeout=300, stdout=stdout_dest, stderr=stderr_dest)
         logging.info("UHI effect applied successfully.")
-    except FileNotFoundError:
-        logging.error("Error: 'java' command not found. Please ensure Java is installed and in the system's PATH.")
-        raise
-    except subprocess.CalledProcessError as e:
-        # Handle errors from the Java tool itself.
-        logging.error("The UHI_Morph tool returned an error.")
-        if e.stdout: logging.error(f"STDOUT:\n{e.stdout}")
-        if e.stderr: logging.error(f"STDERR:\n{e.stderr}")
-        raise
-    except Exception as e:
-        # Handle other potential errors.
-        logging.error(f"An unexpected error occurred: {e}")
+    except (FileNotFoundError, subprocess.CalledProcessError, Exception):
+        # --- BUG FIX IS HERE ---
+        # This function's only job is to run the command and report failure.
+        # It should NOT log the details of the error itself. The calling
+        # function (like check_lcz_availability or a user's script) is
+        # responsible for catching the exception and deciding how to log it.
+        # By simply re-raising, we pass the error up the call stack.
         raise
 
 
@@ -214,38 +168,14 @@ def check_lcz_availability(*,
                            original_lcz: int,
                            target_lcz: int,
                            fwg_jar_path: str,
-                           java_class_path_prefix: str) -> Union[bool, Dict[str, List]]:
-    """Checks if the specified original and target LCZs are available for a given EPW file.
-
-    This utility function internally calls `uhi_morph` in a temporary directory
-    to validate the LCZ pair. If the tool fails because an LCZ is unavailable,
-    this function intelligently parses the error message to determine which of
-    the input LCZs was invalid.
-
-    It is designed to be used as a pre-flight check before running a full
-    morphing workflow, providing precise feedback to the user.
-
-    Args:
-        epw_path (str): Path to the source EPW file to check.
-        original_lcz (int): The original LCZ number (1-17) you want to validate.
-        target_lcz (int): The target LCZ number (1-17) you want to validate.
-        fwg_jar_path (str): Path to the `FutureWeatherGenerator.jar` file.
-        java_class_path_prefix (str): The Java package prefix for the tool
-            (e.g., 'futureweathergenerator').
-
-    Returns:
-        Union[bool, Dict[str, List]]:
-        - `True` if both LCZs are available.
-        - A dictionary with keys 'invalid_messages' (listing specific errors)
-          and 'available' (listing valid LCZ descriptions) if validation fails.
-        - `False` if an unexpected error occurs.
-    """
+                           java_class_path_prefix: str,
+                           show_tool_output: bool = False) -> Union[bool, Dict[str, List]]:
+    """Checks if the specified original and target LCZs are available for a given EPW file."""
     logging.info(f"Checking LCZ pair (Original: {original_lcz}, Target: {target_lcz}) availability for {os.path.basename(epw_path)}...")
 
-    # Use a temporary directory that is automatically created and cleaned up.
     with tempfile.TemporaryDirectory() as temp_dir:
         try:
-            # Call uhi_morph once. It will raise CalledProcessError on failure.
+            # Call uhi_morph. It will now raise an exception silently on failure.
             uhi_morph(
                 fwg_epw_path=epw_path,
                 fwg_jar_path=fwg_jar_path,
@@ -253,71 +183,49 @@ def check_lcz_availability(*,
                 fwg_original_lcz=original_lcz,
                 fwg_target_lcz=target_lcz,
                 java_class_path_prefix=java_class_path_prefix,
-                show_tool_output=False  # Always run silently for checks.
+                show_tool_output=show_tool_output
             )
-            # If no exception was raised, the LCZ pair is valid.
             logging.info(f"LCZ pair (Original: {original_lcz}, Target: {target_lcz}) is available.")
             return True
-
         except subprocess.CalledProcessError as e:
-            # If the tool failed, parse its output to find the available LCZs.
+            # This block now has exclusive control over handling the error.
+            # It can parse the output without the user seeing the raw error log.
             output = e.stdout + e.stderr
             available_lczs_full_text = []
             available_lcz_numbers = set()
             start_parsing = False
-
-            # Iterate through the captured output line by line.
             for line in output.splitlines():
-                # The line "The LCZs available are:" is our trigger to start parsing.
                 if 'The LCZs available are:' in line:
                     start_parsing = True
                     continue
-
-                # Once triggered, look for lines containing LCZ information.
                 if start_parsing:
-                    # Use regex to safely extract the LCZ number from the line.
                     match = re.search(r'LCZ (\d+)', line)
                     if match:
-                        # Store the number for logical checks and the full text for display.
                         available_lcz_numbers.add(int(match.group(1)))
                         available_lczs_full_text.append(line.strip())
 
-            # If we successfully parsed the list of available LCZs, diagnose the problem.
             if available_lczs_full_text:
                 invalid_lczs_messages = []
-
-                # Check which of the user's inputs are not in the valid set.
                 if original_lcz not in available_lcz_numbers:
                     invalid_lczs_messages.append(f"The original LCZ '{original_lcz}' is not available.")
-
-                # Check the target LCZ only if it's different from the original.
                 if target_lcz not in available_lcz_numbers and original_lcz != target_lcz:
                     invalid_lczs_messages.append(f"The target LCZ '{target_lcz}' is not available.")
-
-                # If both are the same and invalid, the message is simpler.
                 if original_lcz == target_lcz and original_lcz not in available_lcz_numbers:
                     invalid_lczs_messages = [f"The specified LCZ '{original_lcz}' is not available."]
-
-                # Return a structured dictionary with the diagnosis.
-                return {
-                    "invalid_messages": invalid_lczs_messages,
-                    "available": available_lczs_full_text
-                }
+                return {"invalid_messages": invalid_lczs_messages, "available": available_lczs_full_text}
             else:
-                # If the error was for a different, unexpected reason, report it.
                 logging.error("An unexpected error occurred during LCZ check. Could not parse available LCZs.")
                 logging.error(f"STDERR:\n{e.stderr}")
                 return False
-
         except Exception:
-            # Catch any other exceptions (e.g., Java not found, invalid user input).
             return False
 
 
 def get_available_lczs(*,
                        epw_paths: Union[str, List[str]],
                        fwg_jar_path: str,
-                       java_class_path_prefix: str) -> Dict[str, List[int]]:
+                       java_class_path_prefix: str = 'futureweathergenerator',
+                       show_tool_output: bool = False) -> Dict[str, List[int]]:
     """Gets the available Local Climate Zones (LCZs) for one or more EPW files.
 
     This utility function iterates through a list of EPW files and runs a
@@ -325,23 +233,32 @@ def get_available_lczs(*,
     It reuses the `check_lcz_availability` function by intentionally probing
     with an invalid LCZ to trigger the error that lists all available zones.
 
+    After processing each file, it logs an INFO message summarizing the
+    available LCZs found.
+
     Args:
         epw_paths (Union[str, List[str]]): A single path or a list of paths
             to the EPW files to be checked.
         fwg_jar_path (str): Path to the `FutureWeatherGenerator.jar` file.
-        java_class_path_prefix (str): The Java package prefix for the tool
-            (e.g., 'futureweathergenerator' or 'futureweathergenerator_europe').
+        java_class_path_prefix (str, optional): The Java package prefix for the
+            tool. Defaults to 'futureweathergenerator' for the global tool.
+            Use 'futureweathergenerator_europe' for the Europe-specific tool.
+        show_tool_output (bool, optional): If True, prints the underlying
+            FWG tool's console output in real-time. Defaults to False.
 
     Returns:
         Dict[str, List[int]]: A dictionary where keys are the EPW filenames
         and values are sorted lists of the available LCZ numbers (as integers).
         If a file cannot be processed, its value will be an empty list.
     """
-    logging.info(f"--- Fetching available LCZs for {len(epw_paths)} EPW file(s) ---")
+    # Determine the number of files for the initial log message.
+    num_files = len(epw_paths) if isinstance(epw_paths, list) else 1
+    logging.info(f"--- Fetching available LCZs for {num_files} EPW file(s) ---")
 
-    # Normalize the input to always be a list.
+    # Normalize the input to always be a list for consistent processing.
     epw_files = [epw_paths] if isinstance(epw_paths, str) else epw_paths
 
+    # This dictionary will store the final results.
     results = {}
 
     # Iterate through each provided EPW file path.
@@ -352,10 +269,11 @@ def get_available_lczs(*,
         # return the list of available zones.
         validation_result = check_lcz_availability(
             epw_path=epw_path,
-            original_lcz=0,  # Use an invalid LCZ to trigger the listing
+            original_lcz=0,  # Use an invalid LCZ to trigger the listing.
             target_lcz=0,
             fwg_jar_path=fwg_jar_path,
-            java_class_path_prefix=java_class_path_prefix
+            java_class_path_prefix=java_class_path_prefix,
+            show_tool_output=show_tool_output
         )
 
         # If the result is a dictionary, it contains the data we need.
@@ -368,12 +286,155 @@ def get_available_lczs(*,
                 if match:
                     lcz_numbers.append(int(match.group(1)))
 
-            # Store the sorted list of numbers.
-            results[filename] = sorted(lcz_numbers)
+            # Store the sorted list of numbers in the results dictionary.
+            sorted_lczs = sorted(lcz_numbers)
+            results[filename] = sorted_lczs
+
+            # --- NEW LOGGING LINE ---
+            # Print a clear, informative summary for the user.
+            logging.info(f"Available LCZs for '{filename}': {sorted_lczs}")
+
         else:
             # If the check succeeded (shouldn't happen with LCZ 0) or failed
-            # unexpectedly, return an empty list for this file.
+            # unexpectedly, log an error and return an empty list for this file.
             logging.error(f"Could not retrieve LCZ list for '{filename}'.")
             results[filename] = []
 
     return results
+
+
+def get_available_lczs(*,
+                       epw_paths: Union[str, List[str]],
+                       fwg_jar_path: str,
+                       java_class_path_prefix: str = 'futureweathergenerator',
+                       show_tool_output: bool = False) -> Dict[str, List[int]]:
+    """Gets the available Local Climate Zones (LCZs) for one or more EPW files.
+
+    This utility function iterates through a list of EPW files and runs a
+    check to determine which LCZs are available for morphing at each location.
+    It reuses the `check_lcz_availability` function by intentionally probing
+    with an invalid LCZ to trigger the error that lists all available zones.
+
+    After processing each file, it logs an INFO message summarizing the
+    available LCZs found.
+
+    Args:
+        epw_paths (Union[str, List[str]]): A single path or a list of paths
+            to the EPW files to be checked.
+        fwg_jar_path (str): Path to the `FutureWeatherGenerator.jar` file.
+        java_class_path_prefix (str, optional): The Java package prefix for the
+            tool. Defaults to 'futureweathergenerator' for the global tool.
+            Use 'futureweathergenerator_europe' for the Europe-specific tool.
+        show_tool_output (bool, optional): If True, prints the underlying
+            FWG tool's console output in real-time. Defaults to False.
+
+    Returns:
+        Dict[str, List[int]]: A dictionary where keys are the EPW filenames
+        and values are sorted lists of the available LCZ numbers (as integers).
+        If a file cannot be processed, its value will be an empty list.
+    """
+    # Determine the number of files for the initial log message.
+    num_files = len(epw_paths) if isinstance(epw_paths, list) else 1
+    logging.info(f"--- Fetching available LCZs for {num_files} EPW file(s) ---")
+
+    # Normalize the input to always be a list for consistent processing.
+    epw_files = [epw_paths] if isinstance(epw_paths, str) else epw_paths
+
+    # This dictionary will store the final results.
+    results = {}
+
+    # Iterate through each provided EPW file path.
+    for epw_path in epw_files:
+        filename = os.path.basename(epw_path)
+
+        # Call the check function with an invalid LCZ (0) to force it to
+        # return the list of available zones.
+        validation_result = check_lcz_availability(
+            epw_path=epw_path,
+            original_lcz=0,  # Use an invalid LCZ to trigger the listing.
+            target_lcz=0,
+            fwg_jar_path=fwg_jar_path,
+            java_class_path_prefix=java_class_path_prefix,
+            show_tool_output=show_tool_output
+        )
+
+        # If the result is a dictionary, it contains the data we need.
+        if isinstance(validation_result, dict):
+            available_lczs_text = validation_result.get("available", [])
+            lcz_numbers = []
+            # Parse the full text lines to extract just the numbers.
+            for line in available_lczs_text:
+                match = re.search(r'LCZ (\d+)', line)
+                if match:
+                    lcz_numbers.append(int(match.group(1)))
+
+            # Store the sorted list of numbers in the results dictionary.
+            sorted_lczs = sorted(lcz_numbers)
+            results[filename] = sorted_lczs
+
+            # --- NEW LOGGING LINE ---
+            # Print a clear, informative summary for the user.
+            logging.info(f"Available LCZs for '{filename}': {sorted_lczs}")
+
+        else:
+            # If the check succeeded (shouldn't happen with LCZ 0) or failed
+            # unexpectedly, log an error and return an empty list for this file.
+            logging.error(f"Could not retrieve LCZ list for '{filename}'.")
+            results[filename] = []
+
+    return results
+
+def export_template_to_excel(iterator, file_path: str = 'scenarios_template.xlsx'):
+    """Generates and exports a scenario template DataFrame to an Excel file.
+
+    This function uses the iterator's `get_template_dataframe` method to create
+    a blank template and saves it as an Excel file, ready for the user to
+    fill in.
+
+    Args:
+        iterator (MorphingIterator): An initialized MorphingIterator instance.
+        file_path (str, optional): The path where the Excel file will be saved.
+            Defaults to 'scenarios_template.xlsx'.
+    """
+    logging.info(f"Generating Excel template for {iterator.workflow_class.__name__}...")
+    template_df = iterator.get_template_dataframe()
+
+    # Export to Excel, ensuring the DataFrame index is not written to the file.
+    template_df.to_excel(file_path, index=False)
+    logging.info(f"Template successfully exported to '{os.path.abspath(file_path)}'")
+
+
+def load_scenarios_from_excel(file_path: str) -> pd.DataFrame:
+    """Loads a scenario DataFrame from an Excel file, converting data types correctly.
+
+    This function reads an Excel file into a Pandas DataFrame and then performs
+    crucial data type conversions. It intelligently converts string representations
+    of lists (e.g., "['CanESM5', 'MIROC6']") back into actual Python lists,
+    which is essential for the iterator to function correctly.
+
+    Args:
+        file_path (str): The path to the Excel file containing the scenarios.
+
+    Returns:
+        pd.DataFrame: A DataFrame with the data types corrected and ready for use
+        with the MorphingIterator.
+    """
+    logging.info(f"Loading scenarios from '{file_path}'...")
+
+    # Read the Excel file into a DataFrame.
+    df = pd.read_excel(file_path)
+
+    # Define columns that are expected to contain lists.
+    list_like_columns = ['epw_paths', 'fwg_gcms', 'fwg_rcm_pairs', 'keyword_mapping']
+
+    # Iterate through the columns that might need type conversion.
+    for col in df.columns:
+        if col in list_like_columns:
+            # Use ast.literal_eval to safely convert string representations of lists/dicts
+            # back into Python objects. It's much safer than using eval().
+            df[col] = df[col].apply(
+                lambda x: ast.literal_eval(x) if isinstance(x, str) and x.startswith(('[', '{')) else x
+            )
+
+    logging.info("Scenarios loaded and data types converted successfully.")
+    return df
