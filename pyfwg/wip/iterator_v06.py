@@ -10,20 +10,19 @@ from .workflow import _MorphingWorkflowBase
 
 
 class MorphingIterator:
-    """Automates running multiple morphing scenarios from a structured input.
+    """Automates running multiple morphing configurations from a structured input.
 
     This class is designed to perform parametric analysis by iterating over
     different sets of parameters for a given morphing workflow. It uses a
-    Pandas DataFrame to define the scenarios.
+    Pandas DataFrame to define the different runs.
 
     The typical usage is a three-step process:
     1. `generate_morphing_workflows()`: Create a detailed execution plan and
-       prepare all the underlying workflow instances for execution.
+       prepare all the underlying workflow instances for each run.
     2. (Optional) Inspect the `self.morphing_workflows_plan_df` and
        `self.prepared_workflows` attributes.
     3. `run_morphing_workflows()`: Run the prepared batch of simulations.
     """
-
     def __init__(self, workflow_class: Type[_MorphingWorkflowBase]):
         """Initializes the iterator with a specific workflow class."""
         self.workflow_class = workflow_class
@@ -59,7 +58,7 @@ class MorphingIterator:
                            fwg_add_uhi: Optional[bool] = None,
                            fwg_epw_original_lcz: Optional[int] = None,
                            fwg_target_uhi_lcz: Optional[int] = None):
-        """Sets default parameter values for all scenarios in the batch run."""
+        """Sets default parameter values for all runs in the batch."""
         # Manually collect all arguments passed to this method into a dictionary.
         provided_args = {
             'final_output_dir': final_output_dir, 'output_filename_pattern': output_filename_pattern,
@@ -102,13 +101,13 @@ class MorphingIterator:
         final_columns = ['epw_paths', 'input_filename_pattern', 'keyword_mapping'] + param_names
         return pd.DataFrame(columns=final_columns)
 
-    def _apply_defaults(self, scenarios_df: pd.DataFrame) -> pd.DataFrame:
-        """(Private) Fills missing values and adds missing columns with defaults."""
+    def _apply_defaults(self, runs_df: pd.DataFrame) -> pd.DataFrame:
+        """(Private) Fills missing values in a runs DataFrame with defaults."""
         sig = inspect.signature(self.workflow_class.configure_and_preview)
         hardcoded_defaults = {p.name: p.default for p in sig.parameters.values() if p.default is not inspect.Parameter.empty}
         final_defaults = {**hardcoded_defaults, **self.custom_defaults}
 
-        completed_df = scenarios_df.copy()
+        completed_df = runs_df.copy()
 
         for col, default_val in final_defaults.items():
             if col not in completed_df.columns:
@@ -122,22 +121,22 @@ class MorphingIterator:
         return completed_df
 
     def generate_morphing_workflows(self,
-                                    scenarios_df: pd.DataFrame,
+                                    runs_df: pd.DataFrame,
                                     input_filename_pattern: Optional[str] = None,
                                     keyword_mapping: Optional[Dict] = None):
         """Generates a detailed execution plan and prepares all workflow instances.
 
         This method is the core of the planning phase. It:
-        1. Takes a user-defined scenario DataFrame.
+        1. Takes a user-defined run DataFrame.
         2. Applies all defaults.
         3. Performs a dry run of the file mapping to add new columns with the
            extracted categories.
         4. Stores the final, detailed DataFrame in `self.morphing_workflows_plan_df`.
         5. Instantiates and fully configures a `MorphingWorkflow` for each
-           scenario, storing them in `self.prepared_workflows` for inspection.
+           run, storing them in `self.prepared_workflows` for inspection.
 
         Args:
-            scenarios_df (pd.DataFrame): The user's DataFrame of scenarios.
+            runs_df (pd.DataFrame): The user's DataFrame of runs.
             input_filename_pattern (Optional[str], optional): A regex pattern for
                 filename mapping, applied to *every* run. Defaults to None.
             keyword_mapping (Optional[Dict], optional): A dictionary of keyword
@@ -145,7 +144,7 @@ class MorphingIterator:
         """
         logging.info("Generating detailed execution plan and preparing workflows...")
 
-        plan_df = self._apply_defaults(scenarios_df)
+        plan_df = self._apply_defaults(runs_df)
 
         if 'input_filename_pattern' not in plan_df.columns or plan_df['input_filename_pattern'].isnull().all():
             plan_df['input_filename_pattern'] = input_filename_pattern
@@ -216,7 +215,7 @@ class MorphingIterator:
                 workflow.configure_and_preview(**run_params)
                 self.prepared_workflows.append(workflow)
             except Exception as e:
-                logging.error(f"Failed to prepare workflow for scenario {index + 1}: {e}")
+                logging.error(f"Failed to prepare workflow for run {index + 1}: {e}")
 
         logging.info(f"Execution plan generated and {len(self.prepared_workflows)} workflows prepared.")
 
@@ -231,15 +230,15 @@ class MorphingIterator:
                 console output setting for all workflows in this batch.
                 - If `True` or `False`, it will force this behavior for all runs.
                 - If `None` (default), it will use the `fwg_show_tool_output`
-                  value defined for each individual scenario in the plan.
+                  value defined for each individual run in the plan.
         """
         if not self.prepared_workflows:
             raise RuntimeError("No workflows have been prepared. Please run generate_morphing_workflows() first.")
 
-        logging.info(f"Starting execution of {len(self.prepared_workflows)} prepared scenarios...")
+        logging.info(f"Starting execution of {len(self.prepared_workflows)} prepared runs...")
 
         for i, workflow in enumerate(self.prepared_workflows):
-            logging.info(f"--- Running Scenario {i + 1}/{len(self.prepared_workflows)} ---")
+            logging.info(f"--- Running Run {i + 1}/{len(self.prepared_workflows)} ---")
             try:
                 # Override the show_tool_output setting if a value is provided.
                 if show_tool_output is not None:
@@ -248,10 +247,10 @@ class MorphingIterator:
                 if workflow.is_config_valid:
                     workflow.execute_morphing()
                 else:
-                    logging.error(f"Scenario {i + 1} skipped due to invalid configuration detected during preparation.")
+                    logging.error(f"Run {i + 1} skipped due to invalid configuration detected during preparation.")
             except Exception as e:
-                logging.error(f"An unexpected error occurred in scenario {i + 1}: {e}")
-                logging.error("Moving to the next scenario.")
+                logging.error(f"An unexpected error occurred in run {i + 1}: {e}")
+                logging.error("Moving to the next run.")
                 continue
 
         logging.info("Batch run complete.")

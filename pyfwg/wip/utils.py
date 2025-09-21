@@ -384,17 +384,18 @@ def get_available_lczs(*,
 
     return results
 
-def export_template_to_excel(iterator, file_path: str = 'scenarios_template.xlsx'):
-    """Generates and exports a scenario template DataFrame to an Excel file.
+
+def export_template_to_excel(iterator, file_path: str = 'runs_template.xlsx'):
+    """Generates and exports a run template DataFrame to an Excel file.
 
     This function uses the iterator's `get_template_dataframe` method to create
     a blank template and saves it as an Excel file, ready for the user to
-    fill in.
+    fill in with different runs.
 
     Args:
         iterator (MorphingIterator): An initialized MorphingIterator instance.
         file_path (str, optional): The path where the Excel file will be saved.
-            Defaults to 'scenarios_template.xlsx'.
+            Defaults to 'runs_template.xlsx'.
     """
     logging.info(f"Generating Excel template for {iterator.workflow_class.__name__}...")
     template_df = iterator.get_template_dataframe()
@@ -404,8 +405,8 @@ def export_template_to_excel(iterator, file_path: str = 'scenarios_template.xlsx
     logging.info(f"Template successfully exported to '{os.path.abspath(file_path)}'")
 
 
-def load_scenarios_from_excel(file_path: str) -> pd.DataFrame:
-    """Loads a scenario DataFrame from an Excel file, converting data types correctly.
+def load_runs_from_excel(file_path: str) -> pd.DataFrame:
+    """Loads a DataFrame of runs from an Excel file, converting data types correctly.
 
     This function reads an Excel file into a Pandas DataFrame and then performs
     crucial data type conversions. It intelligently converts string representations
@@ -413,13 +414,13 @@ def load_scenarios_from_excel(file_path: str) -> pd.DataFrame:
     which is essential for the iterator to function correctly.
 
     Args:
-        file_path (str): The path to the Excel file containing the scenarios.
+        file_path (str): The path to the Excel file containing the runs.
 
     Returns:
         pd.DataFrame: A DataFrame with the data types corrected and ready for use
         with the MorphingIterator.
     """
-    logging.info(f"Loading scenarios from '{file_path}'...")
+    logging.info(f"Loading runs from '{file_path}'...")
 
     # Read the Excel file into a DataFrame.
     df = pd.read_excel(file_path)
@@ -436,5 +437,5 @@ def load_scenarios_from_excel(file_path: str) -> pd.DataFrame:
                 lambda x: ast.literal_eval(x) if isinstance(x, str) and x.startswith(('[', '{')) else x
             )
 
-    logging.info("Scenarios loaded and data types converted successfully.")
+    logging.info("Runs loaded and data types converted successfully.")
     return df

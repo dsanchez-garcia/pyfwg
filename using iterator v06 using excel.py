@@ -1,5 +1,5 @@
 import pandas as pd
-from pyfwg.wip import MorphingWorkflowGlobal, export_template_to_excel, load_scenarios_from_excel, get_available_lczs
+from pyfwg.wip import MorphingWorkflowGlobal, export_template_to_excel, load_runs_from_excel, get_available_lczs
 
 import os
 from pyfwg.wip.iterator_v06 import MorphingIterator
@@ -18,7 +18,7 @@ export_template_to_excel(iterator, file_path=template_path)
 #
 # --- PASO 3: Cargar los Escenarios desde Excel ---
 template_path_mod = 'my_parametric_study_modified.xlsx'
-scenarios_from_excel = load_scenarios_from_excel(template_path_mod)
+scenarios_from_excel = load_runs_from_excel(template_path_mod)
 
 print("--- Scenarios Loaded from Excel ---")
 print(scenarios_from_excel)
@@ -57,7 +57,7 @@ mapping_rules = {
 
 
 iterator.generate_morphing_workflows(
-    scenarios_df=scenarios_from_excel,
+    runs_df=scenarios_from_excel,
     keyword_mapping=mapping_rules
     # ... parámetros de mapeo
 )
