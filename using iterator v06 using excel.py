@@ -7,6 +7,18 @@ from pyfwg.wip.iterator_v06 import MorphingIterator
 
 # --- PASO 1: Exportar la Plantilla ---
 iterator = MorphingIterator(workflow_class=MorphingWorkflowGlobal)
+
+
+iterator.set_default_values(
+    fwg_jar_path=r"D:\OneDrive - Universidad de Cádiz (uca.es)\Programas\FutureWeatherGenerator_v3.0.1.jar",
+    output_filename_pattern='{city}_{uhi}_interp-{fwg_interpolation_method_id}_{ssp}_{year}',
+    fwg_epw_original_lcz=2,
+    fwg_target_uhi_lcz=3,
+    # fwg_rcm_pairs=['ICHEC_EC_EARTH_SMHI_RCA4'],
+
+)
+
+
 template_path = 'my_parametric_study.xlsx'
 export_template_to_excel(iterator, file_path=template_path)
 
@@ -35,14 +47,6 @@ available_lczs = get_available_lczs(
 )
 ##
 
-iterator.set_default_values(
-    fwg_jar_path=r"D:\OneDrive - Universidad de Cádiz (uca.es)\Programas\FutureWeatherGenerator_v3.0.1.jar",
-    output_filename_pattern='{city}_{uhi}_interp-{fwg_interpolation_method_id}_{ssp}_{year}',
-    fwg_epw_original_lcz=2,
-    fwg_target_uhi_lcz=3,
-    # fwg_rcm_pairs=['ICHEC_EC_EARTH_SMHI_RCA4'],
-
-)
 
 mapping_rules = {
     'city': {

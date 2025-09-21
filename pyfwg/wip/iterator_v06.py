@@ -16,12 +16,68 @@ class MorphingIterator:
     different sets of parameters for a given morphing workflow. It uses a
     Pandas DataFrame to define the different runs.
 
-    The typical usage is a three-step process:
-    1. `generate_morphing_workflows()`: Create a detailed execution plan and
-       prepare all the underlying workflow instances for each run.
-    2. (Optional) Inspect the `self.morphing_workflows_plan_df` and
-       `self.prepared_workflows` attributes.
-    3. `run_morphing_workflows()`: Run the prepared batch of simulations.
+    The typical usage is a structured, multi-step process that provides
+    clarity and control at each stage:
+
+    **Step 1: Initialization**
+        Instantiate the iterator with the desired workflow class.
+        ```python
+        iterator = MorphingIterator(workflow_class=MorphingWorkflowGlobal)
+        ```
+
+    **Step 2: Define Common Parameters (Optional)**
+        Use the `set_default_values()` method to define parameters that will be
+        the same for all runs in the batch, such as `fwg_jar_path`.
+
+    **Step 3: Define the Runs DataFrame**
+        Create a DataFrame that specifies what changes between each run. This
+        can be done in two ways:
+
+        *   **A) Programmatically with Pandas:**
+            Use `get_template_dataframe()` to get a blank template, then add
+            rows for each run.
+            ```python
+            runs_df = iterator.get_template_dataframe()
+            runs_df.loc = {'epw_paths': 'file1.epw', 'fwg_gcms': ['CanESM5']}
+            runs_df.loc = {'epw_paths': 'file2.epw', 'fwg_gcms': ['MIROC6']}
+            ```
+
+        *   **B) Using an Excel Template:**
+            Use the utility functions to export a template, edit it in Excel,
+            and then load it back.
+            ```python
+            from pyfwg import export_template_to_excel, load_runs_from_excel
+            export_template_to_excel(iterator, 'my_runs.xlsx')
+            # (User edits the Excel file here)
+            runs_df = load_runs_from_excel('my_runs.xlsx')
+            ```
+
+    **Step 4: Generate the Full Execution Plan**
+        Call `generate_morphing_workflows()` with the DataFrame of runs. This
+        method applies all defaults (from the class and from `set_default_values`),
+        parses filenames, prepares all the underlying workflow instances, and
+        stores the complete plan for review.
+
+    **Step 5: Inspect and Verify (Optional)**
+        Before running, you can inspect the `iterator.morphing_workflows_plan_df`
+        DataFrame and the `iterator.prepared_workflows` list to ensure
+        everything is configured as expected.
+
+    **Step 6: Execute the Batch Run**
+        Call `run_morphing_workflows()` to execute the entire batch of prepared
+        simulations.
+
+    Attributes:
+        workflow_class (Type[_MorphingWorkflowBase]): The workflow class that
+            will be used for each iteration.
+        custom_defaults (Dict[str, Any]): A dictionary of default parameters
+            set by the user via `set_default_values`.
+        prepared_workflows (List[_MorphingWorkflowBase]): A list of fully
+            configured, ready-to-run workflow instances. Populated by
+            `generate_morphing_workflows`.
+        morphing_workflows_plan_df (Optional[pd.DataFrame]): A detailed
+            DataFrame showing the complete configuration for every run in the
+            batch. Populated by `generate_morphing_workflows`.
     """
     def __init__(self, workflow_class: Type[_MorphingWorkflowBase]):
         """Initializes the iterator with a specific workflow class."""
