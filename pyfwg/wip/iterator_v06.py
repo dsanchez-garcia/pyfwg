@@ -114,7 +114,30 @@ class MorphingIterator:
                            fwg_add_uhi: Optional[bool] = None,
                            fwg_epw_original_lcz: Optional[int] = None,
                            fwg_target_uhi_lcz: Optional[int] = None):
-        """Sets default parameter values for all runs in the batch."""
+        """Sets default parameter values for all runs in the batch.
+
+        This method is a convenient way to define parameters that are common
+        to all runs in a parametric study, such as `fwg_jar_path` or a shared
+        `output_filename_pattern`.
+
+        Any parameter set here will be used for every row in the DataFrame
+        unless a different value is specified for that parameter in the row
+        itself. This follows a clear priority order:
+        1. (Lowest) Hardcoded defaults from the workflow class.
+        2. (Medium) Defaults set with this method.
+        3. (Highest) Values specified directly in the runs DataFrame.
+
+        The method has an explicit signature for all possible arguments,
+        providing auto-completion and type hints in your editor. It also
+        includes a validation check to warn the user if they provide a
+        model-specific argument that is not applicable to the chosen workflow
+        (e.g., providing `fwg_rcm_pairs` for a `MorphingWorkflowGlobal` instance).
+
+        Args:
+            * (keyword-only): All arguments must be specified by name.
+            (All arguments are optional and correspond to the parameters of the
+            workflow's `configure_and_preview` method).
+        """
         # Manually collect all arguments passed to this method into a dictionary.
         provided_args = {
             'final_output_dir': final_output_dir, 'output_filename_pattern': output_filename_pattern,
@@ -148,32 +171,112 @@ class MorphingIterator:
         logging.info(f"Custom default values have been set for the iterator: {self.custom_defaults}")
 
     def get_template_dataframe(self) -> pd.DataFrame:
-        """Generates an empty Pandas DataFrame with the correct parameter columns."""
+        """Generates an empty Pandas DataFrame with the correct parameter columns.
+
+        This helper method provides a convenient, error-proof template for the
+        user to define their parametric runs.
+
+        It works by dynamically inspecting the signature of the `configure_and_preview`
+        method of the workflow class that was passed to the iterator's
+        constructor (e.g., `MorphingWorkflowGlobal`). This ensures that the
+        DataFrame columns perfectly match the required and optional arguments
+        of the specific workflow, preventing typos and errors.
+
+        The template also includes the essential columns for the iterator:
+        `epw_paths`, `input_filename_pattern`, and `keyword_mapping`.
+
+        Returns:
+            pd.DataFrame: An empty Pandas DataFrame with columns corresponding
+            to all the configurable parameters for a batch run.
+        """
+        # --- 1. Inspect the Workflow's Configuration Method ---
+        # Get the signature object of the target method. This object contains
+        # rich metadata about all of its parameters.
         sig = inspect.signature(self.workflow_class.configure_and_preview)
+
+        # --- 2. Extract Parameter Names ---
+        # Iterate through the parameters in the signature.
+        # We only want keyword-only arguments, excluding 'self' and the generic
+        # '**kwargs' collector if it existed.
         param_names = [
             p.name for p in sig.parameters.values()
             if p.name not in ('self', 'kwargs') and p.kind == p.KEYWORD_ONLY
         ]
+
+        # --- 3. Construct the Final Column List ---
+        # The final DataFrame should have the iterator-specific columns first,
+        # followed by all the parameters from the workflow's config method.
         final_columns = ['epw_paths', 'input_filename_pattern', 'keyword_mapping'] + param_names
+
+        # --- 4. Create and Return the Template ---
+        # Create an empty DataFrame using the constructed list of column names.
         return pd.DataFrame(columns=final_columns)
 
     def _apply_defaults(self, runs_df: pd.DataFrame) -> pd.DataFrame:
-        """(Private) Fills missing values in a runs DataFrame with defaults."""
+        """(Private) Fills missing values and adds missing columns with defaults.
+
+        This helper method is the core of the configuration logic. It takes a
+        user-provided DataFrame (which may be sparse) and creates a complete,
+        fully populated DataFrame ready for planning and execution.
+
+        It operates with a clear priority order:
+        1. (Lowest) Hardcoded defaults from the workflow class signature.
+        2. (Medium) Custom defaults set by the user via `set_default_values`.
+        3. (Highest) Values specified directly in the input `runs_df`.
+
+        The method handles two main cases for each parameter:
+        - If a column for a parameter does not exist in the input DataFrame,
+          it is created and filled entirely with the final default value.
+        - If a column exists but contains missing (NaN) values, only those
+          missing values are filled with the final default value.
+
+        Args:
+            runs_df (pd.DataFrame): The user's DataFrame of runs, potentially
+                with missing values or columns.
+
+        Returns:
+            pd.DataFrame: A new, fully populated DataFrame with all defaults applied.
+        """
+        # --- 1. Determine the Final Set of Default Values ---
+
+        # Get the hardcoded default values from the workflow's method signature.
         sig = inspect.signature(self.workflow_class.configure_and_preview)
-        hardcoded_defaults = {p.name: p.default for p in sig.parameters.values() if p.default is not inspect.Parameter.empty}
+        hardcoded_defaults = {
+            p.name: p.default
+            for p in sig.parameters.values()
+            if p.default is not inspect.Parameter.empty
+        }
+
+        # Create the final defaults dictionary by merging the two sources.
+        # The custom_defaults (from set_default_values) will override the
+        # hardcoded_defaults, establishing the correct priority.
         final_defaults = {**hardcoded_defaults, **self.custom_defaults}
 
+        # Create a copy of the user's DataFrame to avoid modifying the original.
         completed_df = runs_df.copy()
 
+        # --- 2. Apply Defaults to the DataFrame ---
+
+        # Iterate through all available default parameters.
         for col, default_val in final_defaults.items():
+            # Case 1: The column does not exist in the user's DataFrame.
             if col not in completed_df.columns:
+                # If a default value exists, create the column and fill all
+                # rows with this default.
                 if default_val is not None:
                     completed_df[col] = default_val
+            # Case 2: The column exists, but may have missing values.
             else:
+                # Only proceed if there is a default value to fill with.
                 if default_val is not None:
+                    # Use the robust .apply() method to fill only the NaN values.
+                    # This is safer than .fillna() for DataFrames with mixed
+                    # data types (like lists) and avoids FutureWarning.
                     completed_df[col] = completed_df[col].apply(
                         lambda x: default_val if pd.isnull(x) else x
                     )
+
+        # Return the fully populated DataFrame.
         return completed_df
 
     def generate_morphing_workflows(self,
