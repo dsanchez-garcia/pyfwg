@@ -285,93 +285,137 @@ class MorphingIterator:
                                     keyword_mapping: Optional[Dict] = None):
         """Generates a detailed execution plan and prepares all workflow instances.
 
-        This method is the core of the planning phase. It:
-        1. Takes a user-defined run DataFrame.
-        2. Applies all defaults.
-        3. Performs a dry run of the file mapping to add new columns with the
-           extracted categories.
-        4. Stores the final, detailed DataFrame in `self.morphing_workflows_plan_df`.
-        5. Instantiates and fully configures a `MorphingWorkflow` for each
-           run, storing them in `self.prepared_workflows` for inspection.
+        This method is the core of the planning phase. It orchestrates the
+        entire setup for a batch run by performing several key tasks:
+
+        1.  **Applies Defaults**: It takes the user's (potentially sparse)
+            DataFrame of runs and creates a complete, fully populated version
+            by applying all default values from the class and from the
+            `set_default_values` method.
+        2.  **Maps Categories**: It performs a "dry run" of the file mapping for
+            each run to extract categories from the EPW filenames.
+        3.  **Enriches the Plan**: It adds new columns (`cat_*`) to the plan
+            DataFrame, showing the extracted categories for each run. This
+            complete plan is then stored in the `self.morphing_workflows_plan_df`
+            attribute for user inspection.
+        4.  **Prepares Workflows**: It instantiates and fully configures a
+            `MorphingWorkflow` object for each run in the plan. These
+            ready-to-run instances are stored in `self.prepared_workflows`.
 
         Args:
-            runs_df (pd.DataFrame): The user's DataFrame of runs.
+            runs_df (pd.DataFrame): The user's DataFrame of runs. Each row
+                represents a unique configuration to be executed.
             input_filename_pattern (Optional[str], optional): A regex pattern for
-                filename mapping, applied to *every* run. Defaults to None.
+                filename mapping, applied as a default to *every* run unless
+                overridden in the DataFrame. Defaults to None.
             keyword_mapping (Optional[Dict], optional): A dictionary of keyword
-                rules for filename mapping, applied to *every* run.
+                rules for filename mapping, applied as a default to *every* run
+                unless overridden in the DataFrame.
         """
         logging.info("Generating detailed execution plan and preparing workflows...")
 
+        # --- Part 1: Generate the Detailed DataFrame Plan ---
+
+        # First, apply all default values to get a complete parameter set for each run.
         plan_df = self._apply_defaults(runs_df)
 
+        # If the user provided a static mapping strategy, ensure the corresponding
+        # columns exist in the plan DataFrame for completeness.
         if 'input_filename_pattern' not in plan_df.columns or plan_df['input_filename_pattern'].isnull().all():
             plan_df['input_filename_pattern'] = input_filename_pattern
         if 'keyword_mapping' not in plan_df.columns or plan_df['keyword_mapping'].isnull().all():
+            # Pandas requires lists/dicts to be wrapped when assigning to a column.
             plan_df['keyword_mapping'] = [keyword_mapping] * len(plan_df)
 
-        extracted_categories = []
+        # This list will store the dictionary of mapped categories for each run.
+        extracted_categories_per_run = []
+        # This set will collect all unique category keys found across all runs.
         all_category_keys = set()
 
+        # Perform a dry run of the mapping for each scenario in the plan.
         for index, row in plan_df.iterrows():
             epw_paths = row.get('epw_paths')
             epw_files = [epw_paths] if isinstance(epw_paths, str) else epw_paths
-            row_input_pattern = row.get('input_filename_pattern') if pd.notnull(row.get('input_filename_pattern')) else input_filename_pattern
-            row_keyword_map = row.get('keyword_mapping') if pd.notnull(row.get('keyword_mapping')) else keyword_mapping
+
+            # Determine the mapping strategy for this specific run, preferring the
+            # value in the row but falling back to the static argument.
+            run_input_pattern = row.get('input_filename_pattern') if pd.notnull(row.get('input_filename_pattern')) else input_filename_pattern
+            run_keyword_map = row.get('keyword_mapping') if pd.notnull(row.get('keyword_mapping')) else keyword_mapping
+
+            # Create a temporary workflow instance just for mapping.
             temp_workflow = self.workflow_class()
             temp_workflow.map_categories(
                 epw_files=epw_files,
-                input_filename_pattern=row_input_pattern,
-                keyword_mapping=row_keyword_map
+                input_filename_pattern=run_input_pattern,
+                keyword_mapping=run_keyword_map
             )
+            # Store the combined dictionary of all mapped categories for this run.
             run_categories = {**temp_workflow.epw_categories, **temp_workflow.incomplete_epw_categories}
-            extracted_categories.append(run_categories)
+            extracted_categories_per_run.append(run_categories)
+            # Keep track of all unique category keys found.
             for cat_dict in run_categories.values():
                 all_category_keys.update(cat_dict.keys())
 
+        # Add new 'cat_*' columns to the plan DataFrame.
         sorted_cat_keys = sorted(list(all_category_keys))
         for key in sorted_cat_keys:
             plan_df[f'cat_{key}'] = [
+                # For each run, compile a list of unique values found for this category.
                 list({cat_dict.get(key) for cat_dict in run_cats.values() if cat_dict.get(key)})
-                for run_cats in extracted_categories
+                for run_cats in extracted_categories_per_run
             ]
 
+        # Reorder columns to place the new 'cat_*' columns in an intuitive position.
         original_cols = list(plan_df.columns)
         cat_cols = [f'cat_{key}' for key in sorted_cat_keys]
         try:
+            # Try to insert after 'keyword_mapping'.
             insert_pos = original_cols.index('keyword_mapping') + 1
         except ValueError:
             try:
+                # Fallback to inserting after 'input_filename_pattern'.
                 insert_pos = original_cols.index('input_filename_pattern') + 1
             except ValueError:
+                # Final fallback to inserting after 'epw_paths'.
                 insert_pos = 1
 
         non_cat_cols = [c for c in original_cols if not c.startswith('cat_')]
         final_cols_order = non_cat_cols[:insert_pos] + cat_cols + non_cat_cols[insert_pos:]
         plan_df = plan_df.reindex(columns=final_cols_order)
 
+        # --- Store the final plan as an instance attribute ---
         self.morphing_workflows_plan_df = plan_df
 
+        # --- Part 2: Prepare all workflow instances ---
         logging.info(f"Preparing {len(plan_df)} workflow instances...")
         self.prepared_workflows = []
 
+        # Iterate through the now-complete plan DataFrame.
         for index, row in plan_df.iterrows():
+            # The row now contains all defaults, so dropna is safe.
             run_params = row.dropna().to_dict()
+
+            # Extract parameters that are for the iterator, not the workflow config.
             epw_paths = run_params.pop('epw_paths')
-            row_input_pattern = run_params.pop('input_filename_pattern', None) or input_filename_pattern
-            row_keyword_map = run_params.pop('keyword_mapping', None) or keyword_mapping
+            run_input_pattern = run_params.pop('input_filename_pattern', None) or input_filename_pattern
+            run_keyword_map = run_params.pop('keyword_mapping', None) or keyword_mapping
+            # Remove the informational 'cat_*' columns before passing to the config method.
             for col in list(run_params.keys()):
                 if col.startswith('cat_'):
                     run_params.pop(col)
+
             epw_files = [epw_paths] if isinstance(epw_paths, str) else epw_paths
+
             try:
+                # Create and configure a workflow instance for this specific run.
                 workflow = self.workflow_class()
                 workflow.map_categories(
                     epw_files=epw_files,
-                    input_filename_pattern=row_input_pattern,
-                    keyword_mapping=row_keyword_map
+                    input_filename_pattern=run_input_pattern,
+                    keyword_mapping=run_keyword_map
                 )
                 workflow.configure_and_preview(**run_params)
+                # Add the fully configured instance to the list for later execution.
                 self.prepared_workflows.append(workflow)
             except Exception as e:
                 logging.error(f"Failed to prepare workflow for run {index + 1}: {e}")
@@ -381,33 +425,60 @@ class MorphingIterator:
     def run_morphing_workflows(self, show_tool_output: Optional[bool] = None):
         """Executes the batch of prepared morphing workflows.
 
-        This method iterates through the list of workflow instances stored in
-        `self.prepared_workflows` and calls `execute_morphing` on each valid one.
+        This method is the final step in the iterator's workflow. It takes no
+        arguments to define the scenarios, as it relies entirely on the list of
+        workflow instances that were created and configured by the
+        `generate_morphing_workflows` method.
+
+        It iterates through the `self.prepared_workflows` list and calls the
+        `execute_morphing` method on each one that was found to have a valid
+        configuration during the preparation phase.
 
         Args:
-            show_tool_output (Optional[bool], optional): A flag to override the
-                console output setting for all workflows in this batch.
-                - If `True` or `False`, it will force this behavior for all runs.
-                - If `None` (default), it will use the `fwg_show_tool_output`
-                  value defined for each individual run in the plan.
+            show_tool_output (Optional[bool], optional): A flag to globally
+                override the console output setting for all workflows in this
+                specific batch execution.
+                - If `True` or `False`, it will force this behavior for all runs,
+                  ignoring the `fwg_show_tool_output` value in the plan.
+                - If `None` (the default), each run will use the
+                  `fwg_show_tool_output` value that was defined for it in the
+                  execution plan.
+
+        Raises:
+            RuntimeError: If `generate_morphing_workflows()` has not been run
+                first, as there are no prepared workflows to execute.
         """
+        # Guard clause: Ensure that the preparation step has been completed.
         if not self.prepared_workflows:
             raise RuntimeError("No workflows have been prepared. Please run generate_morphing_workflows() first.")
 
         logging.info(f"Starting execution of {len(self.prepared_workflows)} prepared runs...")
 
+        # Iterate through the list of fully configured workflow instances.
         for i, workflow in enumerate(self.prepared_workflows):
             logging.info(f"--- Running Run {i + 1}/{len(self.prepared_workflows)} ---")
             try:
-                # Override the show_tool_output setting if a value is provided.
+                # --- Override Logic for Tool Output ---
+                # If the user provides a value for show_tool_output when calling
+                # this method, it overrides the setting in the prepared workflow instance.
+                # This provides a convenient way to force silent or verbose output for
+                # the entire batch at execution time.
                 if show_tool_output is not None:
                     workflow.inputs['show_tool_output'] = show_tool_output
 
+                # Check the validity flag that was set during the preparation phase.
                 if workflow.is_config_valid:
+                    # If the configuration is valid, call the workflow's execution method.
                     workflow.execute_morphing()
                 else:
+                    # If the configuration was found to be invalid during preparation,
+                    # log an error and skip this run.
                     logging.error(f"Run {i + 1} skipped due to invalid configuration detected during preparation.")
+
             except Exception as e:
+                # If any unexpected error occurs during a single run, log it
+                # and continue with the next run in the batch. This makes the
+                # iterator robust to single-run failures.
                 logging.error(f"An unexpected error occurred in run {i + 1}: {e}")
                 logging.error("Moving to the next run.")
                 continue
