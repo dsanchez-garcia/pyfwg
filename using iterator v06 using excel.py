@@ -1,13 +1,13 @@
 import pandas as pd
-from pyfwg.wip import MorphingWorkflowEurope, export_template_to_excel, load_scenarios_from_excel, get_available_lczs
+from pyfwg.wip import MorphingWorkflowGlobal, export_template_to_excel, load_scenarios_from_excel, get_available_lczs
 
 import os
-from pyfwg.wip.iterator_v05 import MorphingIterator
+from pyfwg.wip.iterator_v06 import MorphingIterator
 
 
 # --- PASO 1: Exportar la Plantilla ---
-iterator = MorphingIterator(workflow_class=MorphingWorkflowEurope)
-template_path = 'my_parametric_study_europe.xlsx'
+iterator = MorphingIterator(workflow_class=MorphingWorkflowGlobal)
+template_path = 'my_parametric_study.xlsx'
 export_template_to_excel(iterator, file_path=template_path)
 
 # --- PASO 2: El Usuario Edita el Archivo Excel ---
@@ -17,7 +17,7 @@ export_template_to_excel(iterator, file_path=template_path)
 # Por ejemplo, en la columna 'fwg_gcms', escribiría: ['CanESM5', 'MIROC6']
 #
 # --- PASO 3: Cargar los Escenarios desde Excel ---
-template_path_mod = 'my_parametric_study_europe_modified.xlsx'
+template_path_mod = 'my_parametric_study_modified.xlsx'
 scenarios_from_excel = load_scenarios_from_excel(template_path_mod)
 
 print("--- Scenarios Loaded from Excel ---")
@@ -28,22 +28,19 @@ print(scenarios_from_excel)
 epw_files_dir = 'epws/wo_pattern'
 epw_files = [os.path.join(epw_files_dir, f) for f in os.listdir(epw_files_dir)]
 
-# Get available LCZs for each EPW file. This is important to know which fwg_epw_original_lcz and fwg_target_uhi_lcz values we can use in the next step.
+# Get available LCZs for each EPW file.
 available_lczs = get_available_lczs(
     epw_paths=epw_files,
-    # fwg_jar_path=r"D:\OneDrive - Universidad de Cádiz (uca.es)\Programas\FutureWeatherGenerator_v3.0.1.jar",
-    fwg_jar_path=r"D:\OneDrive - Universidad de Cádiz (uca.es)\Programas\FutureWeatherGenerator_Europe_v1.0.1.jar",
+    fwg_jar_path=r"D:\OneDrive - Universidad de Cádiz (uca.es)\Programas\FutureWeatherGenerator_v3.0.1.jar",
 )
 ##
 
 iterator.set_default_values(
-    # fwg_jar_path=r"D:\OneDrive - Universidad de Cádiz (uca.es)\Programas\FutureWeatherGenerator_v3.0.1.jar",
-    fwg_jar_path=r"D:\OneDrive - Universidad de Cádiz (uca.es)\Programas\FutureWeatherGenerator_Europe_v1.0.1.jar",
-    output_filename_pattern='{city}_{uhi}_interp-{fwg_interpolation_method_id}_{rcp}_{year}',
+    fwg_jar_path=r"D:\OneDrive - Universidad de Cádiz (uca.es)\Programas\FutureWeatherGenerator_v3.0.1.jar",
+    output_filename_pattern='{city}_{uhi}_interp-{fwg_interpolation_method_id}_{ssp}_{year}',
     fwg_epw_original_lcz=2,
     fwg_target_uhi_lcz=3,
-    # fwg_gcms=['CanESM5'],
-    fwg_rcm_pairs=['ICHEC_EC_EARTH_SMHI_RCA4'],
+    # fwg_rcm_pairs=['ICHEC_EC_EARTH_SMHI_RCA4'],
 
 )
 
@@ -65,6 +62,6 @@ execution_plan_df = iterator.generate_execution_plan(
     # ... parámetros de mapeo
 )
 
-## --- PASO 5: Preparar y Ejecutar (como antes) ---
+# --- PASO 5: Preparar y Ejecutar (como antes) ---
 iterator.execute_workflows()
 # iterator.execute_workflows()
