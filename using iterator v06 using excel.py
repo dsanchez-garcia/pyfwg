@@ -56,12 +56,12 @@ mapping_rules = {
 }
 
 
-execution_plan_df = iterator.generate_execution_plan(
+iterator.generate_morphing_workflows(
     scenarios_df=scenarios_from_excel,
     keyword_mapping=mapping_rules
     # ... parámetros de mapeo
 )
 
-# --- PASO 5: Preparar y Ejecutar (como antes) ---
-iterator.execute_workflows()
+## --- PASO 5: Preparar y Ejecutar (como antes) ---
+iterator.run_morphing_workflows(show_tool_output=True)
 # iterator.execute_workflows()
