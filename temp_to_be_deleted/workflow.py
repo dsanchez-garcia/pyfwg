@@ -30,21 +30,13 @@ class _MorphingWorkflowBase:
     by the child classes during their initialization.
     """
 
-    # --- Define attributes at the class level ---
-    # These are now class attributes, accessible without creating an instance.
-    tool_scenarios: List[str] = []
-    valid_models: set = set()
-    model_arg_name: str = ""
-    java_class_path_prefix: str = ""
-    scenario_placeholder_name: str = ""
-
     def __init__(
             self,
-            # tool_scenarios: List[str],
-            # valid_models: set,
-            # model_arg_name: str,
-            # java_class_path_prefix: str,
-            # scenario_placeholder_name: str
+            tool_scenarios: List[str],
+            valid_models: set,
+            model_arg_name: str,
+            java_class_path_prefix: str,
+            scenario_placeholder_name: str
     ):
         """Initializes the base workflow with tool-specific constants.
 
@@ -57,13 +49,13 @@ class _MorphingWorkflowBase:
                 models in this workflow (e.g., 'gcms' or 'rcm_pairs').
         """
         # --- Tool-specific configuration provided by child classes ---
-        # self.tool_scenarios = tool_scenarios
-        # self.valid_models = valid_models
-        # self.model_arg_name = model_arg_name
-        # self.java_class_path_prefix = java_class_path_prefix
-        # self.scenario_placeholder_name = scenario_placeholder_name  # e.g., 'ssp' or 'rcp'
+        self.tool_scenarios = tool_scenarios
+        self.valid_models = valid_models
+        self.model_arg_name = model_arg_name
+        self.java_class_path_prefix = java_class_path_prefix
+        self.scenario_placeholder_name = scenario_placeholder_name  # e.g., 'ssp' or 'rcp'
 
-        # Instance attributes are now for storing state, not configuration.
+        # --- State attributes populated during the workflow ---
         self.inputs: Dict[str, Any] = {}
         self.epw_categories: Dict[str, Dict[str, str]] = {}
         self.incomplete_epw_categories: Dict[str, Dict[str, str]] = {}
@@ -654,28 +646,21 @@ class MorphingWorkflowGlobal(_MorphingWorkflowBase):
     4. `execute_morphing()`: Run the final computation.
     """
 
-    # These override the empty attributes from the base class.
-    tool_scenarios = GLOBAL_SCENARIOS
-    valid_models = DEFAULT_GLOBAL_GCMS
-    model_arg_name = 'gcms'
-    java_class_path_prefix = 'futureweathergenerator'
-    scenario_placeholder_name = 'ssp'
+    def __init__(self):
+        """Initializes the workflow for the GLOBAL tool.
 
-    # def __init__(self):
-    #     """Initializes the workflow for the GLOBAL tool.
-    #
-    #     This sets up the base class with the correct constants for global
-    #     morphing, including the list of valid GCMs and the SSP scenarios
-    #     that the tool will generate.
-    #     """
-    #     # Call the parent constructor with the specific constants for the global tool.
-    #     super().__init__(
-    #         tool_scenarios=GLOBAL_SCENARIOS,
-    #         valid_models=DEFAULT_GLOBAL_GCMS,
-    #         model_arg_name='gcms',  # The command-line argument for models is 'gcms'.
-    #         java_class_path_prefix='futureweathergenerator',
-    #         scenario_placeholder_name='ssp'
-    #     )
+        This sets up the base class with the correct constants for global
+        morphing, including the list of valid GCMs and the SSP scenarios
+        that the tool will generate.
+        """
+        # Call the parent constructor with the specific constants for the global tool.
+        super().__init__(
+            tool_scenarios=GLOBAL_SCENARIOS,
+            valid_models=DEFAULT_GLOBAL_GCMS,
+            model_arg_name='gcms',  # The command-line argument for models is 'gcms'.
+            java_class_path_prefix='futureweathergenerator',
+            scenario_placeholder_name='ssp'
+        )
 
     def configure_and_preview(self, *,
                               final_output_dir: str,
@@ -782,27 +767,21 @@ class MorphingWorkflowEurope(_MorphingWorkflowBase):
     4. `execute_morphing()`: Run the final computation.
     """
 
-    tool_scenarios = EUROPE_SCENARIOS
-    valid_models = DEFAULT_EUROPE_RCMS
-    model_arg_name = 'rcm_pairs'
-    java_class_path_prefix = 'futureweathergenerator_europe'
-    scenario_placeholder_name = 'rcp'
+    def __init__(self):
+        """Initializes the workflow for the EUROPE tool.
 
-    # def __init__(self):
-    #     """Initializes the workflow for the EUROPE tool.
-    #
-    #     This sets up the base class with the correct constants for European
-    #     morphing, including the list of valid GCM-RCM pairs and the RCP
-    #     scenarios that the tool will generate.
-    #     """
-    #     # Call the parent constructor with the specific constants for the Europe tool.
-    #     super().__init__(
-    #         tool_scenarios=EUROPE_SCENARIOS,
-    #         valid_models=DEFAULT_EUROPE_RCMS,
-    #         model_arg_name='rcm_pairs',  # The command-line argument for models is 'rcm_pairs'.
-    #         java_class_path_prefix='futureweathergenerator_europe',
-    #         scenario_placeholder_name='rcp'
-    #     )
+        This sets up the base class with the correct constants for European
+        morphing, including the list of valid GCM-RCM pairs and the RCP
+        scenarios that the tool will generate.
+        """
+        # Call the parent constructor with the specific constants for the Europe tool.
+        super().__init__(
+            tool_scenarios=EUROPE_SCENARIOS,
+            valid_models=DEFAULT_EUROPE_RCMS,
+            model_arg_name='rcm_pairs',  # The command-line argument for models is 'rcm_pairs'.
+            java_class_path_prefix='futureweathergenerator_europe',
+            scenario_placeholder_name='rcp'
+        )
 
     def configure_and_preview(self, *,
                               final_output_dir: str,

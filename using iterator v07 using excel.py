@@ -2,7 +2,7 @@ import pandas as pd
 from pyfwg.wip import MorphingWorkflowGlobal, export_template_to_excel, load_runs_from_excel, get_available_lczs
 
 import os
-from pyfwg.wip.iterator_v07 import MorphingIterator
+from pyfwg.wip.iterator import MorphingIterator
 
 
 # --- PASO 1: Exportar la Plantilla ---
