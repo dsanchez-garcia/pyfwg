@@ -1,4 +1,4 @@
-# import pyfwg.wip as pyfwg
+# import pyfwg as pyfwg
 #
 #
 # pyfwg.uhi_morph(
@@ -13,7 +13,7 @@
 
 ##
 
-from pyfwg.wip.utils import uhi_morph
+from pyfwg.utils import uhi_morph
 uhi_morph(
     fwg_epw_path=r'D:\Python\pyfwg\Seville_Present.epw',
     fwg_jar_path=r"D:\OneDrive - Universidad de Cádiz (uca.es)\Programas\FutureWeatherGenerator_v3.0.1.jar",
@@ -26,18 +26,31 @@ uhi_morph(
 
 ##
 
-from pyfwg.wip.utils import check_lcz_availability
+from pyfwg.utils import check_lcz_availability
 
 lczs = check_lcz_availability(
-    epw_path=r'D:\Python\pyfwg\Seville_Present.epw',
+    epw_path=r'D:\PythonProjects\pyfwg\Seville_Present.epw',
     original_lcz=2,
     target_lcz=4,
     fwg_jar_path=r"D:\OneDrive - Universidad de Cádiz (uca.es)\Programas\FutureWeatherGenerator_v3.0.1.jar",
+    java_class_path_prefix='futureweathergenerator'
 )
 
 ##
 
-import pyfwg.wip as pyfwg
+import pyfwg
+
+available_zones = pyfwg.get_available_lczs(
+    epw_paths='Seville_Present.epw',
+    fwg_jar_path=r"D:\OneDrive - Universidad de Cádiz (uca.es)\Programas\FutureWeatherGenerator_v3.0.1.jar",
+    # In java_class_path_prefix, use 'futureweathergenerator' for the global scope FWG tool, otherwise 'futureweathergenerator_europe'
+    java_class_path_prefix='futureweathergenerator',
+    show_tool_output=False,
+)
+
+##
+
+import pyfwg as pyfwg
 
 jar_path = r"D:\OneDrive - Universidad de Cádiz (uca.es)\Programas\FutureWeatherGenerator_v3.0.1.jar"
 epw_file = 'Seville_Present.epw'
@@ -57,7 +70,7 @@ created_files_custom = pyfwg.morph_epw_global(
 
 ##
 
-import pyfwg.wip as pyfwg
+import pyfwg as pyfwg
 
 jar_path = r"D:\OneDrive - Universidad de Cádiz (uca.es)\Programas\FutureWeatherGenerator_Europe_v1.0.1.jar"
 epw_file = 'Seville_Present.epw'

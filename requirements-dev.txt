@@ -1,0 +1,10 @@
+# requirements-dev.txt
+# Packages required for building, testing, and distributing pyfwg.
+
+build
+twine
+colorlog
+sphinx
+sphinx-rtd-theme
+nbsphinx
+pandas

@@ -245,23 +245,24 @@ def uhi_morph(*,
         logging.info("UHI effect applied successfully.")
 
     except (FileNotFoundError, subprocess.CalledProcessError, Exception) as e:
-        # --- 3. Error Handling ---
-        # Only raise the exception if the caller wants the program to stop.
-        # This allows functions like check_lcz_availability to handle the error gracefully.
-        if raise_on_error:
-            # Provide specific logging for different types of errors.
-            if isinstance(e, FileNotFoundError):
-                logging.error("Error: 'java' command not found. Please ensure Java is installed and in the system's PATH.")
-            elif isinstance(e, subprocess.CalledProcessError):
-                logging.error("The UHI_Morph tool returned an error.")
-                # If output was captured, log it now.
-                if e.stdout: logging.error(f"STDOUT:\n{e.stdout}")
-                if e.stderr: logging.error(f"STDERR:\n{e.stderr}")
-            else:
-                logging.error(f"An unexpected error occurred: {e}")
-
-            # Re-raise the original exception to halt execution.
-            raise e
+        raise e
+        # # --- 3. Error Handling ---
+        # # Only raise the exception if the caller wants the program to stop.
+        # # This allows functions like check_lcz_availability to handle the error gracefully.
+        # if raise_on_error:
+        #     # Provide specific logging for different types of errors.
+        #     if isinstance(e, FileNotFoundError):
+        #         logging.error("Error: 'java' command not found. Please ensure Java is installed and in the system's PATH.")
+        #     elif isinstance(e, subprocess.CalledProcessError):
+        #         logging.error("The UHI_Morph tool returned an error.")
+        #         # If output was captured, log it now.
+        #         if e.stdout: logging.error(f"STDOUT:\n{e.stdout}")
+        #         if e.stderr: logging.error(f"STDERR:\n{e.stderr}")
+        #     else:
+        #         logging.error(f"An unexpected error occurred: {e}")
+        #
+        #     # Re-raise the original exception to halt execution.
+        #     raise e
 
 
 def check_lcz_availability(*,
