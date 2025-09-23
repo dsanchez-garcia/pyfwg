@@ -246,10 +246,15 @@ def morph_epw_global(*,
 
     # Perform a simple pass-through mapping. This populates the workflow's
     # internal list of files, which is required by the configuration step.
-    workflow.map_categories(
-        epw_files=epw_files,
-        keyword_mapping={'basename': {os.path.splitext(os.path.basename(p))[0]: p for p in epw_files}}
-    )
+    # workflow.map_categories(
+    #     epw_files=epw_files,
+    #     keyword_mapping={'basename': {os.path.splitext(os.path.basename(p))[0]: p for p in epw_files}}
+    # )
+
+    # Directly populate the epw_categories attribute.
+    workflow.epw_categories = {
+        os.path.abspath(path): {} for path in epw_files if os.path.exists(path)
+    }
 
     # Call the correct, renamed method: configure_and_preview.
     # This reuses all the validation and parameter-building logic from the class.
@@ -561,10 +566,15 @@ def morph_epw_europe(*,
     epw_files = [epw_paths] if isinstance(epw_paths, str) else epw_paths
 
     # Perform a simple pass-through mapping to populate the internal file list.
-    workflow.map_categories(
-        epw_files=epw_files,
-        keyword_mapping={'basename': {os.path.splitext(os.path.basename(p))[0]: p for p in epw_files}}
-    )
+    # workflow.map_categories(
+    #     epw_files=epw_files,
+    #     keyword_mapping={'basename': {os.path.splitext(os.path.basename(p))[0]: p for p in epw_files}}
+    # )
+
+    # Directly populate the epw_categories attribute.
+    workflow.epw_categories = {
+        os.path.abspath(path): {} for path in epw_files if os.path.exists(path)
+    }
 
     # Call the correct configuration method for the workflow class.
     # This reuses all the validation and parameter-building logic.

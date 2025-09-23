@@ -3,7 +3,7 @@
 
 
 
-import pyfwg.wip as pyfwg
+import pyfwg as pyfwg
 from os import listdir
 
 # jar_path = 'D:\\OneDrive - Universidad de Cádiz (uca.es)\\Programas\\FutureWeatherGenerator_v3.0.0.jar'
