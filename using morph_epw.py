@@ -51,8 +51,8 @@ from pyfwg import morph_epw_global
 # --- Configuration ---
 # Define the path to the EPW file to be processed. You can also define a list of paths to process multiple EPW files.
 # epw_file = 'epws/w_pattern/sevilla_uhi-type-1.epw'
-# epw_file = 'pyfwg/tutorials/epws/wo_pattern/GBR_London.Gatwick.037760_IWEC.epw'
-epw_file = r'D:\Python\pyfwg\pyfwg\tutorials\epws\wo_pattern\GBR_London.Gatwick.037760_IWEC.epw'
+# epw_file = 'pyfwg/tutorials/epws/wo_pattern/GBR_London.Gatwick.037760_IWEC_uhi_type-2.epw'
+epw_file = r'pyfwg/tutorials/epws/wo_pattern/GBR_London.Gatwick.037760_IWEC_uhi_type-2.epw'
 
 
 # !!! IMPORTANT: You MUST change this path to the correct location on your PC !!!

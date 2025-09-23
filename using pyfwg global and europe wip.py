@@ -14,11 +14,11 @@ epw_files = ['epws/wo_pattern/'+ i for i in listdir('epws/wo_pattern')]
 mapping = {
         'city': {
             'seville': ['sevilla', 'SVQ'],
-            'madrid': ['madrid', 'MAD']
+            'london': ['london', 'gatwick']
         },
         'uhi': {
-            'type_1': 'type-1',
-            'type_2': 'type-2'
+            'type-1': 'type-1',
+            'type-2': 'type-2'
         }
     }
 
