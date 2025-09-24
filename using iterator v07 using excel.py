@@ -1,13 +1,14 @@
 import pandas as pd
-from pyfwg.wip import MorphingWorkflowGlobal, export_template_to_excel, load_runs_from_excel, get_available_lczs
+from pyfwg import MorphingWorkflowGlobal, export_template_to_excel, load_runs_from_excel, get_available_lczs
 
 import os
-from pyfwg.wip.iterator import MorphingIterator
+from pyfwg import MorphingIterator
 
 
 # --- PASO 1: Exportar la Plantilla ---
 iterator = MorphingIterator(workflow_class=MorphingWorkflowGlobal)
 
+# --- PASO 2: Define los valores comunes para todas las ejecuciones (valores por defecto) ---
 
 iterator.set_default_values(
     fwg_jar_path=r"D:\OneDrive - Universidad de Cádiz (uca.es)\Programas\FutureWeatherGenerator_v3.0.1.jar",
@@ -19,10 +20,14 @@ iterator.set_default_values(
 )
 
 
+
+# --- PASO 3: definir los valores de los parámetros que van a cambiar ---
+
+
+# --- PASO 3.1: Opción 1. El Usuario Edita el Archivo Excel ---
 template_path = 'my_parametric_study.xlsx'
 export_template_to_excel(iterator, file_path=template_path)
 
-# --- PASO 2: El Usuario Edita el Archivo Excel ---
 #
 # En este punto, el usuario abre 'my_parametric_study.xlsx',
 # rellena las filas con sus escenarios y lo guarda.
