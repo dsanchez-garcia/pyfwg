@@ -25,9 +25,9 @@ class _MorphingWorkflowBase:
     it serves as a foundation for specialized child classes like
     `MorphingWorkflowGlobal` and `MorphingWorkflowEurope`.
 
-    It implements the entire four-step state machine logic (map, preview,
-    configure, execute) in a generic way, relying on configuration provided
-    by the child classes during their initialization.
+    It implements the entire state machine logic (map, configure & preview,
+    execute) in a generic way, relying on configuration provided by the
+    child classes' class attributes.
     """
 
     # --- Define attributes at the class level ---
@@ -46,15 +46,12 @@ class _MorphingWorkflowBase:
             # java_class_path_prefix: str,
             # scenario_placeholder_name: str
     ):
-        """Initializes the base workflow with tool-specific constants.
+        """Initializes the workflow instance's state.
 
-        Args:
-            tool_scenarios (List[str]): The list of climate scenarios that the
-                specific tool (Global or Europe) will generate by default.
-            valid_models (set): A set of valid model names (GCMs or RCM pairs)
-                for validation purposes.
-            model_arg_name (str): The name of the keyword argument used for the
-                models in this workflow (e.g., 'gcms' or 'rcm_pairs').
+        This sets up the attributes that will store the state of a specific
+        workflow run (e.g., user inputs, file plans, etc.). It does not
+        take any arguments, as tool-specific configuration is handled by
+        the class attributes of its children.
         """
         # --- Tool-specific configuration provided by child classes ---
         # self.tool_scenarios = tool_scenarios
@@ -216,9 +213,9 @@ class _MorphingWorkflowBase:
     def _validate_fwg_params(self, params: Dict[str, Any]) -> bool:
         """(Private) Validates the final FWG parameters against known constraints.
 
-        This helper method is called by `set_morphing_config` to ensure that the
+        This helper method is called by `configure_and_preview` to ensure that the
         parameters provided by the user are valid before attempting to run the
-        external tool. It uses the instance attributes `self.model_arg_name` and
+        external tool. It uses the class attributes `self.model_arg_name` and
         `self.valid_models` to perform tool-specific validation.
 
         Args:
@@ -302,18 +299,14 @@ class _MorphingWorkflowBase:
         It performs three main tasks:
         1.  **Configuration**: It merges the base `fwg_params` dictionary with
             any explicit `fwg_` keyword arguments, with the latter taking
-            precedence. This ensures that even omitted arguments are assigned
-            their default values.
+            precedence.
         2.  **Validation**: It validates the final set of parameters against
             the tool's known constraints and sets the `self.is_config_valid` flag.
         3.  **Preview Generation**: It constructs and prints a detailed "dry run"
-            plan, showing the final, renamed paths for all generated files. This
-            plan is also stored in `self.rename_plan` for use by the
-            `execute_morphing` step.
+            plan, which is also stored in `self.rename_plan`.
 
         Args:
-            (All arguments are passed down from the public-facing methods of the
-            child classes like `MorphingWorkflowGlobal`).
+            (All arguments are passed down from the public-facing methods).
         """
         # Guard clause: Ensure that the mapping step has been completed.
         if not self.epw_categories and not self.incomplete_epw_categories:
@@ -464,11 +457,11 @@ class _MorphingWorkflowBase:
         print("=" * 60 + "\nConfiguration set. Call execute_morphing() to start the process.")
 
     def execute_morphing(self):
-        """STEP 4: Executes the morphing process if the configuration is valid.
+        """STEP 3: Executes the morphing process if the configuration is valid.
 
         This method is the final action in the workflow and takes no arguments.
         It relies entirely on the state and configuration set by the previous
-        steps (`map_categories`, `preview_rename_plan`, and `set_morphing_config`).
+        `configure_and_preview` step.
 
         It includes a critical pre-flight check: before processing each file,
         it automatically validates the specified Local Climate Zones (LCZs) if
@@ -476,13 +469,8 @@ class _MorphingWorkflowBase:
         for a file, it is skipped with a detailed error message, and the workflow
         continues with the next file.
 
-        After each successful morphing operation, it processes the generated
-        files, moving and renaming the `.epw` and `.stat` files according to
-        the `rename_plan`. Finally, it handles the cleanup of temporary
-        directories if requested.
-
         Raises:
-            RuntimeError: If `set_morphing_config()` has not been run first, or
+            RuntimeError: If `configure_and_preview()` has not been run first, or
                 if the configuration was found to be invalid during that step.
         """
         # --- Guard Clauses ---
@@ -555,7 +543,23 @@ class _MorphingWorkflowBase:
         logging.info("Morphing workflow finished.")
 
     def _execute_single_morph(self, epw_path: str, temp_output_dir: str) -> bool:
-        """(Private) Executes the external Java tool for a single EPW file."""
+        """(Private) Executes the external Java tool for a single EPW file.
+
+        This helper method performs several key tasks:
+        1. Copies the source EPW file into its dedicated temporary directory.
+        2. Constructs the actual command using the path to the temporary copy.
+        3. Constructs a "display" version of the command for user-friendly logging.
+        4. Runs the `java -cp ...` command using `subprocess.run`.
+        5. Manages console output and handles errors.
+
+        Args:
+            epw_path (str): The absolute path to the source EPW file.
+            temp_output_dir (str): The path to the dedicated temporary directory
+                for this EPW file's output.
+
+        Returns:
+            bool: True if the subprocess completed successfully, False otherwise.
+        """
         try:
             temp_epw_path = os.path.join(temp_output_dir, os.path.basename(epw_path))
             shutil.copy2(epw_path, temp_epw_path)
@@ -611,7 +615,20 @@ class _MorphingWorkflowBase:
             return False
 
     def _process_generated_files(self, source_epw_path: str, temp_dir: str):
-        """(Private) Moves and renames generated .epw and .stat files."""
+        """(Private) Moves and renames generated .epw and .stat files.
+
+        This helper method iterates through all files in a temporary directory
+        after a successful morphing run. It specifically looks for `.epw` and
+        `.stat` files and matches them against the `rename_plan`.
+
+        Auxiliary files (`.csv`, `.log`, etc.) and the original source EPW
+        are ignored and left in the temporary directory for later cleanup.
+
+        Args:
+            source_epw_path (str): The path to the original source EPW file,
+                used to look up the correct renaming plan.
+            temp_dir (str): The temporary directory containing the generated files.
+        """
         logging.info(f"Processing generated files in: {temp_dir}")
 
         plan_for_this_epw = self.rename_plan.get(source_epw_path, {})
@@ -647,11 +664,10 @@ class MorphingWorkflowGlobal(_MorphingWorkflowBase):
     and is pre-configured to work specifically with the global climate models
     (GCMs) and SSP scenarios.
 
-    The intended usage is to follow the four-step process:
+    The intended usage is to follow the three-step process:
     1. `map_categories()`: Analyze input filenames.
-    2. `preview_rename_plan()`: Review the expected output.
-    3. `set_morphing_config()`: Define and validate all execution parameters.
-    4. `execute_morphing()`: Run the final computation.
+    2. `configure_and_preview()`: Define and validate all execution parameters.
+    3. `execute_morphing()`: Run the final computation.
     """
 
     # These override the empty attributes from the base class.
