@@ -28,8 +28,25 @@ class _MorphingWorkflowBase:
     It implements the entire state machine logic (map, configure & preview,
     execute) in a generic way, relying on configuration provided by the
     child classes' class attributes.
-    """
 
+    Attributes:
+        inputs (Dict[str, Any]): A dictionary that stores all user-provided
+            configuration from every step of the workflow. It serves as the
+            central "memory" for the instance.
+        epw_categories (Dict[str, Dict[str, str]]): A dictionary mapping the
+            absolute path of each *successfully and completely* categorized EPW
+            file to a dictionary of its categories.
+        incomplete_epw_categories (Dict[str, Dict[str, str]]): Similar to
+            `epw_categories`, but stores files that were mapped but are missing
+            one or more expected categories based on the `keyword_mapping` rules.
+        epws_to_be_morphed (List[str]): The definitive list of absolute EPW file
+            paths that will be processed when `execute_morphing()` is called.
+        rename_plan (Dict[str, Dict[str, str]]): A detailed mapping that outlines
+            the renaming and moving operations for each generated file.
+        is_config_valid (bool): A boolean flag that is set to `True` only if all
+            parameters provided in `configure_and_preview` pass the internal
+            validation checks.
+    """
     # --- Define attributes at the class level ---
     # These are now class attributes, accessible without creating an instance.
     tool_scenarios: List[str] = []
@@ -665,11 +682,32 @@ class MorphingWorkflowGlobal(_MorphingWorkflowBase):
     (GCMs) and SSP scenarios.
 
     The intended usage is to follow the three-step process:
-    1. `map_categories()`: Analyze input filenames.
-    2. `configure_and_preview()`: Define and validate all execution parameters.
+    1. `map_categories()`: Analyze input filenames to extract categories.
+    2. `configure_and_preview()`: Define and validate all execution parameters
+       and preview the results.
     3. `execute_morphing()`: Run the final computation.
-    """
 
+    This class is ideal for advanced use cases that require custom file renaming
+    and detailed control over the morphing process for global climate data.
+
+    Attributes:
+        inputs (Dict[str, Any]): A dictionary that stores all user-provided
+            configuration from every step of the workflow. It serves as the
+            central "memory" for the instance.
+        epw_categories (Dict[str, Dict[str, str]]): A dictionary mapping the
+            absolute path of each *successfully and completely* categorized EPW
+            file to a dictionary of its categories.
+        incomplete_epw_categories (Dict[str, Dict[str, str]]): Similar to
+            `epw_categories`, but stores files that were mapped but are missing
+            one or more expected categories based on the `keyword_mapping` rules.
+        epws_to_be_morphed (List[str]): The definitive list of absolute EPW file
+            paths that will be processed when `execute_morphing()` is called.
+        rename_plan (Dict[str, Dict[str, str]]): A detailed mapping that outlines
+            the renaming and moving operations for each generated file.
+        is_config_valid (bool): A boolean flag that is set to `True` only if all
+            parameters provided in `configure_and_preview` pass the internal
+            validation checks.
+    """
     # These override the empty attributes from the base class.
     tool_scenarios = GLOBAL_SCENARIOS
     valid_models = DEFAULT_GLOBAL_GCMS
@@ -747,8 +785,18 @@ class MorphingWorkflowGlobal(_MorphingWorkflowBase):
                 override this. Defaults to None.
             fwg_gcms (Optional[List[str]], optional): A specific list of GCMs
                 to use. If None, the full default list is used.
-            (All other `fwg_` arguments are self-explanatory and correspond to
-            the FutureWeatherGenerator tool's options).
+            fwg_create_ensemble (bool, optional): If True, creates an ensemble.
+            fwg_winter_sd_shift (float, optional): Winter standard deviation shift.
+            fwg_summer_sd_shift (float, optional): Summer standard deviation shift.
+            fwg_month_transition_hours (int, optional): Hours for month transition.
+            fwg_use_multithreading (bool, optional): Use multithreading.
+            fwg_interpolation_method_id (int, optional): Interpolation method ID.
+            fwg_limit_variables (bool, optional): Limit variables to physical bounds.
+            fwg_solar_hour_adjustment (int, optional): Solar hour adjustment option.
+            fwg_diffuse_irradiation_model (int, optional): Diffuse irradiation model option.
+            fwg_add_uhi (bool, optional): Add UHI effect.
+            fwg_epw_original_lcz (int, optional): Original EPW LCZ.
+            fwg_target_uhi_lcz (int, optional): Target UHI LCZ.
         """
         # This method acts as a user-friendly, type-hinted interface.
         # It collects all the specific arguments and passes them down to the
@@ -791,11 +839,32 @@ class MorphingWorkflowEurope(_MorphingWorkflowBase):
     and is pre-configured to work specifically with the European GCM-RCM model
     pairs and RCP scenarios.
 
-    The intended usage is to follow the four-step process:
-    1. `map_categories()`: Analyze input filenames.
-    2. `preview_rename_plan()`: Review the expected output.
-    3. `set_morphing_config()`: Define and validate all execution parameters.
-    4. `execute_morphing()`: Run the final computation.
+    The intended usage is to follow the three-step process:
+    1. `map_categories()`: Analyze input filenames to extract categories.
+    2. `configure_and_preview()`: Define and validate all execution parameters
+       and preview the results.
+    3. `execute_morphing()`: Run the final computation.
+
+    This class is ideal for advanced use cases that require custom file renaming
+    and detailed control over the morphing process for European climate data.
+
+    Attributes:
+        inputs (Dict[str, Any]): A dictionary that stores all user-provided
+            configuration from every step of the workflow. It serves as the
+            central "memory" for the instance.
+        epw_categories (Dict[str, Dict[str, str]]): A dictionary mapping the
+            absolute path of each *successfully and completely* categorized EPW
+            file to a dictionary of its categories.
+        incomplete_epw_categories (Dict[str, Dict[str, str]]): Similar to
+            `epw_categories`, but stores files that were mapped but are missing
+            one or more expected categories based on the `keyword_mapping` rules.
+        epws_to_be_morphed (List[str]): The definitive list of absolute EPW file
+            paths that will be processed when `execute_morphing()` is called.
+        rename_plan (Dict[str, Dict[str, str]]): A detailed mapping that outlines
+            the renaming and moving operations for each generated file.
+        is_config_valid (bool): A boolean flag that is set to `True` only if all
+            parameters provided in `configure_and_preview` pass the internal
+            validation checks.
     """
 
     tool_scenarios = EUROPE_SCENARIOS
@@ -847,6 +916,10 @@ class MorphingWorkflowEurope(_MorphingWorkflowBase):
         """STEP 2: Configures, validates, and previews the plan for the EUROPE tool.
 
         This method combines configuration and preview into a single, robust step.
+        It gathers all parameters for the morphing execution, validates them
+        against the known constraints for the Europe-specific tool, and then
+        generates a detailed "dry run" plan of the final filenames for user review.
+
         The `output_filename_pattern` can now include placeholders for any FWG
         parameter (e.g., `{fwg_interpolation_method_id}`).
 
@@ -855,7 +928,7 @@ class MorphingWorkflowEurope(_MorphingWorkflowBase):
             output_filename_pattern (str): The template for final filenames.
                 Must contain `{rcp}` and `{year}`.
             scenario_mapping (Optional[Dict[str, str]], optional): Mapping for
-                scenario names. Defaults to None.
+                scenario names (e.g., {'rcp26': 'RCP-2.6'}). Defaults to None.
             fwg_jar_path (str): Path to the `FutureWeatherGenerator_Europe.jar` file.
             run_incomplete_files (bool, optional): If True, also processes
                 partially categorized files. Defaults to False.
@@ -870,8 +943,18 @@ class MorphingWorkflowEurope(_MorphingWorkflowBase):
                 override this. Defaults to None.
             fwg_rcm_pairs (Optional[List[str]], optional): A specific list of
                 GCM-RCM pairs to use. If None, the full default list is used.
-            (All other `fwg_` arguments are self-explanatory and correspond to
-            the FutureWeatherGenerator tool's options).
+            fwg_create_ensemble (bool, optional): If True, creates an ensemble.
+            fwg_winter_sd_shift (float, optional): Winter standard deviation shift.
+            fwg_summer_sd_shift (float, optional): Summer standard deviation shift.
+            fwg_month_transition_hours (int, optional): Hours for month transition.
+            fwg_use_multithreading (bool, optional): Use multithreading.
+            fwg_interpolation_method_id (int, optional): Interpolation method ID.
+            fwg_limit_variables (bool, optional): Limit variables to physical bounds.
+            fwg_solar_hour_adjustment (int, optional): Solar hour adjustment option.
+            fwg_diffuse_irradiation_model (int, optional): Diffuse irradiation model option.
+            fwg_add_uhi (bool, optional): Add UHI effect.
+            fwg_epw_original_lcz (int, optional): Original EPW LCZ.
+            fwg_target_uhi_lcz (int, optional): Target UHI LCZ.
         """
         # This method acts as a user-friendly, type-hinted interface for the Europe tool.
         # It collects all the specific arguments and passes them down to the
