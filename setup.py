@@ -77,19 +77,14 @@ setup(
     python_requires=">=3.8",
     install_requires=[
         'importlib_resources; python_version<"3.9"',
+        'pandas',
+        'colorlog',
     ],
     extras_require={
-        "colors": ["colorlog"],
         "docs": [
             "sphinx",
             "sphinx-rtd-theme",
             "nbsphinx",
         ],
-        "iterator": ["pandas"],
-        # Define un extra 'all' que instala todo
-        "all": [
-            "colorlog",
-            "pandas",
-        ]
     },
 )
