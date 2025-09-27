@@ -18,6 +18,14 @@ A robust, step-by-step Python workflow manager for the [Future Weather Generator
 - **Excel Integration**: Export templates and load run configurations directly from Excel files for easy parametric analysis.
 - **Clear and Organized Output**: Automatically renames and organizes the final `.epw` and `.stat` files into a clean directory structure.
 
+## What's New in Version 0.2.0?
+
+Version 0.2.0 is a major update that introduces powerful new capabilities for parametric analysis and expanded tool support. For a full list of changes, see the [CHANGELOG.md](CHANGELOG.md) file.
+
+-   **Parametric Analysis with `MorphingIterator`**: The biggest new feature is the `MorphingIterator` class, designed to automate large batches of simulations. Define all your runs in a Pandas DataFrame or an Excel file and execute them with a single command.
+-   **Support for the Europe-Specific Tool**: `pyfwg` now fully supports the European version of the FWG tool with the `MorphingWorkflowEurope` class and `morph_epw_europe` function.
+-   **Important API Change**: The original `morph_epw` function has been renamed to `morph_epw_global` to distinguish it from the new Europe-specific function. Also, the `MorphingWorkflow` class has been renamed to `MorphingWorkflowGlobal` to reflect the new new Europe-specific class.
+
 ## Requirements
 
 Before using `pyfwg`, you need to have the following installed and configured:
@@ -165,6 +173,10 @@ created_files = morph_epw_europe(
     fwg_rcm_pairs=[list(DEFAULT_EUROPE_RCMS)[0]] # Use the first available RCM pair
 )
 ```
+
+## Documentation
+The full documentation is available at [pyfwg.readthedocs.io](https://pyfwg.readthedocs.io/en/latest/).
+
 ## Changelog
 
 A detailed history of all changes made to the library is available in the [CHANGELOG.md](CHANGELOG.md) file.
