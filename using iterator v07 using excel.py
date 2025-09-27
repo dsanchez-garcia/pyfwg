@@ -39,6 +39,7 @@ iterator.set_default_values(
     # output_filename_pattern='{city}_{uhi}_gcm-{fwg_gcms}_{ssp}_{year}', # to avoid overwriting files, you should include in the filename pattern the parameters that change between runs
     # output_filename_pattern='{city}_{uhi}_gcm-sindistinguir_{ssp}_{year}',  # to avoid overwriting files, you should include in the filename pattern the parameters that change between runs
     output_filename_pattern='{city}_no-uhi_gcm-{fwg_gcms}_{ssp}_{year}',  # to avoid overwriting files, you should include in the filename pattern the parameters that change between runs
+    # output_filename_pattern='{city}_no-uhi_no-gcm_{ssp}_{year}',  # to avoid overwriting files, you should include in the filename pattern the parameters that change between runs
 
     # Acabamos de comprobar que los LCZs 2 y 3 están disponibles para todos los EPWs, por lo que procedemos a usarlos como valores por defecto.
     # En caso de que no coincidieran, habría que definir los LCZs en los parámetros que cambian, en el siguiente paso

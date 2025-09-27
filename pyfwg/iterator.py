@@ -298,8 +298,8 @@ class MorphingIterator:
         3.  **Enriches the Plan**: It adds new columns (`cat_*`) to the plan
             DataFrame, showing the extracted categories for each run.
         4.  **Validates for Filename Overwrites**: It identifies all parameters
-            that vary between runs and ensures they are included as placeholders
-            in the `output_filename_pattern` to prevent data loss.
+            AND categories that vary between runs and ensures they are included
+            as placeholders in the `output_filename_pattern` to prevent data loss.
         5.  **Stores the Plan**: The final, validated DataFrame is stored in
             `self.morphing_workflows_plan_df` for user inspection.
         6.  **Prepares Workflows**: It instantiates and fully configures a
@@ -317,7 +317,7 @@ class MorphingIterator:
                 unless overridden in the DataFrame.
 
         Raises:
-            ValueError: If a parameter varies between runs but is not included
+            ValueError: If a parameter or category varies between runs but is not included
                 as a placeholder in the `output_filename_pattern`.
         """
         logging.info("Generating detailed execution plan and preparing workflows...")
@@ -396,33 +396,36 @@ class MorphingIterator:
         # Find all placeholders the user has included in their pattern.
         pattern_placeholders = set(re.findall(r'{(.*?)}', output_pattern))
 
-        # Find all parameters that actually vary across the different runs.
-        varying_params = []
+        # Find all parameters AND categories that actually vary across the different runs.
+        varying_columns = []
         # These columns are expected to be different per run but don't need to be in the filename pattern.
         ignore_cols = ['epw_paths', 'final_output_dir', 'input_filename_pattern', 'keyword_mapping']
 
         for col in plan_df.columns:
-            if col in ignore_cols or col.startswith('cat_'):
+            if col in ignore_cols:
                 continue
 
             try:
-                # For columns with lists, we must convert them to a hashable type (tuple) to check uniqueness.
+                # Use a robust method to check for uniqueness, handling lists.
                 if isinstance(plan_df[col].dropna().iloc[0], list):
                     unique_count = plan_df[col].dropna().apply(lambda x: tuple(x) if isinstance(x, list) else x).nunique()
                 else:
                     unique_count = plan_df[col].nunique()
 
                 if unique_count > 1:
-                    varying_params.append(col)
+                    varying_columns.append(col)
             except (TypeError, IndexError):
                 # This can happen with mixed types or empty columns, which we can ignore.
                 continue
 
-        # Check if any varying parameter is missing from the filename pattern.
-        missing_placeholders = set(varying_params) - pattern_placeholders
+        # Convert column names to placeholder names (e.g., 'cat_uhi' -> 'uhi').
+        varying_placeholders = {col.replace('cat_', '') for col in varying_columns}
+
+        # Check if any varying parameter or category is missing from the filename pattern.
+        missing_placeholders = varying_placeholders - pattern_placeholders
         if missing_placeholders:
             raise ValueError(
-                f"Potential file overwrite detected! The following parameters vary between runs but are not "
+                f"Potential file overwrite detected! The following parameters or categories vary between runs but are not "
                 f"included as placeholders in the 'output_filename_pattern': {list(missing_placeholders)}. "
                 f"Please add them to the pattern to ensure unique filenames."
             )
