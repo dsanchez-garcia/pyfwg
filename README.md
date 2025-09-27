@@ -165,7 +165,9 @@ created_files = morph_epw_europe(
     fwg_rcm_pairs=[list(DEFAULT_EUROPE_RCMS)[0]] # Use the first available RCM pair
 )
 ```
+## Changelog
 
+A detailed history of all changes made to the library is available in the [CHANGELOG.md](CHANGELOG.md) file.
 
 ## Acknowledgements
 

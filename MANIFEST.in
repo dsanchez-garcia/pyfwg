@@ -3,6 +3,7 @@
 # Include the main documentation files in the source distribution.
 include README.md
 include LICENSE
+include CHANGELOG.md
 
 # --- Include ALL files within the tutorials directory ---
 # The wildcard '*' ensures that subdirectories, .ipynb, .epw, and any other
