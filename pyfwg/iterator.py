@@ -1,4 +1,5 @@
 # pyfwg/iterator.py
+import re
 
 import pandas as pd
 import inspect
@@ -7,7 +8,7 @@ from typing import Type, List, Dict, Any, Union, Optional
 
 # Import the base class to use its type hint
 from .workflow import _MorphingWorkflowBase
-
+from .constants import ALL_POSSIBLE_YEARS
 
 class MorphingIterator:
     """Automates running multiple morphing configurations from a structured input.
@@ -295,10 +296,13 @@ class MorphingIterator:
         2.  **Maps Categories**: It performs a "dry run" of the file mapping for
             each run to extract categories from the EPW filenames.
         3.  **Enriches the Plan**: It adds new columns (`cat_*`) to the plan
-            DataFrame, showing the extracted categories for each run. This
-            complete plan is then stored in the `self.morphing_workflows_plan_df`
-            attribute for user inspection.
-        4.  **Prepares Workflows**: It instantiates and fully configures a
+            DataFrame, showing the extracted categories for each run.
+        4.  **Validates for Filename Overwrites**: It identifies all parameters
+            that vary between runs and ensures they are included as placeholders
+            in the `output_filename_pattern` to prevent data loss.
+        5.  **Stores the Plan**: The final, validated DataFrame is stored in
+            `self.morphing_workflows_plan_df` for user inspection.
+        6.  **Prepares Workflows**: It instantiates and fully configures a
             `MorphingWorkflow` object for each run in the plan. These
             ready-to-run instances are stored in `self.prepared_workflows`.
 
@@ -311,6 +315,10 @@ class MorphingIterator:
             keyword_mapping (Optional[Dict], optional): A dictionary of keyword
                 rules for filename mapping, applied as a default to *every* run
                 unless overridden in the DataFrame.
+
+        Raises:
+            ValueError: If a parameter varies between runs but is not included
+                as a placeholder in the `output_filename_pattern`.
         """
         logging.info("Generating detailed execution plan and preparing workflows...")
 
@@ -332,13 +340,12 @@ class MorphingIterator:
         # This set will collect all unique category keys found across all runs.
         all_category_keys = set()
 
-        # Perform a dry run of the mapping for each scenario in the plan.
+        # Perform a dry run of the mapping for each run in the plan.
         for index, row in plan_df.iterrows():
             epw_paths = row.get('epw_paths')
             epw_files = [epw_paths] if isinstance(epw_paths, str) else epw_paths
 
-            # Determine the mapping strategy for this specific run, preferring the
-            # value in the row but falling back to the static argument.
+            # Determine the mapping strategy for this specific run.
             run_input_pattern = row.get('input_filename_pattern') if pd.notnull(row.get('input_filename_pattern')) else input_filename_pattern
             run_keyword_map = row.get('keyword_mapping') if pd.notnull(row.get('keyword_mapping')) else keyword_mapping
 
@@ -369,28 +376,66 @@ class MorphingIterator:
         original_cols = list(plan_df.columns)
         cat_cols = [f'cat_{key}' for key in sorted_cat_keys]
         try:
-            # Try to insert after 'keyword_mapping'.
             insert_pos = original_cols.index('keyword_mapping') + 1
         except ValueError:
             try:
-                # Fallback to inserting after 'input_filename_pattern'.
                 insert_pos = original_cols.index('input_filename_pattern') + 1
             except ValueError:
-                # Final fallback to inserting after 'epw_paths'.
-                insert_pos = 1
+                insert_pos = 1  # After 'epw_paths'
 
         non_cat_cols = [c for c in original_cols if not c.startswith('cat_')]
         final_cols_order = non_cat_cols[:insert_pos] + cat_cols + non_cat_cols[insert_pos:]
         plan_df = plan_df.reindex(columns=final_cols_order)
 
-        # --- Store the final plan as an instance attribute ---
+        # --- Part 2: Validate for potential filename overwrites ---
+        logging.info("Validating for potential filename overwrites...")
+
+        # Get the output pattern from the plan (it should be the same for all runs).
+        output_pattern = plan_df['output_filename_pattern'].iloc[0]
+
+        # Find all placeholders the user has included in their pattern.
+        pattern_placeholders = set(re.findall(r'{(.*?)}', output_pattern))
+
+        # Find all parameters that actually vary across the different runs.
+        varying_params = []
+        # These columns are expected to be different per run but don't need to be in the filename pattern.
+        ignore_cols = ['epw_paths', 'final_output_dir', 'input_filename_pattern', 'keyword_mapping']
+
+        for col in plan_df.columns:
+            if col in ignore_cols or col.startswith('cat_'):
+                continue
+
+            try:
+                # For columns with lists, we must convert them to a hashable type (tuple) to check uniqueness.
+                if isinstance(plan_df[col].dropna().iloc[0], list):
+                    unique_count = plan_df[col].dropna().apply(lambda x: tuple(x) if isinstance(x, list) else x).nunique()
+                else:
+                    unique_count = plan_df[col].nunique()
+
+                if unique_count > 1:
+                    varying_params.append(col)
+            except (TypeError, IndexError):
+                # This can happen with mixed types or empty columns, which we can ignore.
+                continue
+
+        # Check if any varying parameter is missing from the filename pattern.
+        missing_placeholders = set(varying_params) - pattern_placeholders
+        if missing_placeholders:
+            raise ValueError(
+                f"Potential file overwrite detected! The following parameters vary between runs but are not "
+                f"included as placeholders in the 'output_filename_pattern': {list(missing_placeholders)}. "
+                f"Please add them to the pattern to ensure unique filenames."
+            )
+
+        logging.info("Filename validation passed. No overwrites detected.")
+
+        # --- Part 3: Store the plan and prepare workflows ---
         self.morphing_workflows_plan_df = plan_df
 
-        # --- Part 2: Prepare all workflow instances ---
         logging.info(f"Preparing {len(plan_df)} workflow instances...")
         self.prepared_workflows = []
 
-        # Iterate through the now-complete plan DataFrame.
+        # Iterate through the now-validated plan DataFrame.
         for index, row in plan_df.iterrows():
             # The row now contains all defaults, so dropna is safe.
             run_params = row.dropna().to_dict()

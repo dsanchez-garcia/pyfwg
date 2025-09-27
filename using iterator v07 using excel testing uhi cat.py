@@ -63,7 +63,7 @@ export_template_to_excel(iterator, file_path=template_path)
 # Por ejemplo, en la columna 'fwg_gcms', escribiría: ['CanESM5', 'MIROC6']
 
 # Definimos el path del archivo modificado
-template_path_mod = 'my_parametric_study_modified.xlsx'
+template_path_mod = 'my_parametric_study_modified_testing-uhi-cat.xlsx'
 
 #Mostramos el dataframe modificado
 print(pd.read_excel(template_path_mod))
@@ -74,40 +74,40 @@ runs_from_excel = load_runs_from_excel(template_path_mod)
 print("--- Scenarios Loaded from Excel ---")
 print(runs_from_excel)
 
-# --- PASO 3.2: Opción 2. El Usuario añade filas al dataframe
-
-# This DataFrame will define what changes between each run.
-user_df = iterator.get_template_dataframe()
-
-
-# --- Run 1: Run the first EPW file with one set of GCMs ---
-
-user_df.loc[0] = {
-    'epw_paths': epw_files[0],
-    'final_output_dir': './results/0',
-    'fwg_gcms': ['CanESM5'],
-    # 'fwg_rcm_pairs': ['ICHEC_EC_EARTH_SMHI_RCA4']
-}
-
-# --- Run 2: Run the second EPW file with a different GCM ---
-user_df.loc[1] = {
-    'epw_paths': epw_files[1],
-    'final_output_dir': './results/1',
-    'fwg_gcms': ['MIROC6'],
-    # 'fwg_rcm_pairs': ['ICHEC_EC_EARTH_SMHI_RCA4']
-}
-
-# --- PASO 3.3: Opción 3. El Usuario añade filas al dataframe modificado con excel
-
-from pyfwg import DEFAULT_GLOBAL_GCMS
-first_gcm = list(DEFAULT_GLOBAL_GCMS)[0]
-runs_from_excel_modified = runs_from_excel.copy()
-runs_from_excel_modified.loc[2] = {
-    'epw_paths': epw_files[1],
-    'final_output_dir': 'results_using_excel/seville',
-    'fwg_gcms': [first_gcm],
-    # 'fwg_rcm_pairs': ['ICHEC_EC_EARTH_SMHI_RCA4']
-}
+# # --- PASO 3.2: Opción 2. El Usuario añade filas al dataframe
+#
+# # This DataFrame will define what changes between each run.
+# user_df = iterator.get_template_dataframe()
+#
+#
+# # --- Run 1: Run the first EPW file with one set of GCMs ---
+#
+# user_df.loc[0] = {
+#     'epw_paths': epw_files[0],
+#     'final_output_dir': './results/0',
+#     'fwg_gcms': ['CanESM5'],
+#     # 'fwg_rcm_pairs': ['ICHEC_EC_EARTH_SMHI_RCA4']
+# }
+#
+# # --- Run 2: Run the second EPW file with a different GCM ---
+# user_df.loc[1] = {
+#     'epw_paths': epw_files[1],
+#     'final_output_dir': './results/1',
+#     'fwg_gcms': ['MIROC6'],
+#     # 'fwg_rcm_pairs': ['ICHEC_EC_EARTH_SMHI_RCA4']
+# }
+#
+# # --- PASO 3.3: Opción 3. El Usuario añade filas al dataframe modificado con excel
+#
+# from pyfwg import DEFAULT_GLOBAL_GCMS
+# first_gcm = list(DEFAULT_GLOBAL_GCMS)[0]
+# runs_from_excel_modified = runs_from_excel.copy()
+# runs_from_excel_modified.loc[2] = {
+#     'epw_paths': epw_files[1],
+#     'final_output_dir': 'results_using_excel/seville',
+#     'fwg_gcms': [first_gcm],
+#     # 'fwg_rcm_pairs': ['ICHEC_EC_EARTH_SMHI_RCA4']
+# }
 
 
 # --- PASO 4: Generar los MorphingWorkflow instances ---
@@ -117,7 +117,7 @@ runs_from_excel_modified.loc[2] = {
 
 
 iterator.generate_morphing_workflows(
-    runs_df=runs_from_excel_modified,
+    runs_df=runs_from_excel,
     keyword_mapping=mapping_rules
     # ... parámetros de mapeo
 )
