@@ -59,7 +59,6 @@ setup(
     classifiers=[
         "Development Status :: 4 - Beta",
         "Intended Audience :: Science/Research",
-        "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
         "Programming Language :: Python :: 3",
         "Programming Language :: Python :: 3.8",
@@ -70,11 +69,11 @@ setup(
     ],
 
     # --- Package Finding and Data ---
-    packages=find_packages(exclude=["wip", "wip.*", "tests", "tests.*"]),
+    packages=find_packages(exclude=["wip", "wip.*", "tests", "tests.*", "tutorials", "tutorials.*"]),
     include_package_data=True,
 
     # --- Dependencies and Requirements ---
-    python_requires=">=3.8",
+    python_requires=">=3.9",
     install_requires=[
         'importlib_resources; python_version<"3.9"',
         'pandas',
