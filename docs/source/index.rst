@@ -3,8 +3,8 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-Welcome to pyfwg's documentation!
-=================================
+Welcome to pyfwg's documentation! (Version |release|)
+=======================================================
 
 `pyfwg` is a robust Python workflow manager for the Future Weather Generator command-line tools.
 

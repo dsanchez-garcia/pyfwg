@@ -1,6 +1,14 @@
 pyfwg package
 =============
 
+Subpackages
+-----------
+
+.. toctree::
+   :maxdepth: 4
+
+   pyfwg.tutorials
+
 Submodules
 ----------
 
@@ -16,6 +24,22 @@ pyfwg.constants module
 ----------------------
 
 .. automodule:: pyfwg.constants
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+pyfwg.iterator module
+---------------------
+
+.. automodule:: pyfwg.iterator
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+pyfwg.utils module
+------------------
+
+.. automodule:: pyfwg.utils
    :members:
    :undoc-members:
    :show-inheritance:

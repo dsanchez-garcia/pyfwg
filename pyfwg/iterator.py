@@ -471,7 +471,8 @@ class MorphingIterator:
         logging.info(f"Execution plan generated and {len(self.prepared_workflows)} workflows prepared.")
 
     def run_morphing_workflows(self, show_tool_output: Optional[bool] = None):
-        """Executes the batch of prepared morphing workflows.
+        """
+        Executes the batch of prepared morphing workflows.
 
         This method is the final step in the iterator's workflow. It takes no
         arguments to define the scenarios, as it relies entirely on the list of
@@ -486,6 +487,7 @@ class MorphingIterator:
             show_tool_output (Optional[bool], optional): A flag to globally
                 override the console output setting for all workflows in this
                 specific batch execution.
+
                 - If `True` or `False`, it will force this behavior for all runs,
                   ignoring the `fwg_show_tool_output` value in the plan.
                 - If `None` (the default), each run will use the

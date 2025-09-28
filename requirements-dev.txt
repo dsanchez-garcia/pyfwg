@@ -8,3 +8,4 @@ sphinx
 sphinx-rtd-theme
 nbsphinx
 pandas
+roman

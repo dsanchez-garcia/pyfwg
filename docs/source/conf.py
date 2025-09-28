@@ -1,13 +1,35 @@
 # docs/source/conf.py
 
-import os
-import sys
+import os, sys, re
 
 # -- Path setup --------------------------------------------------------------
 # Add the project root to the Python path so Sphinx can find your code.
 # This assumes conf.py is in docs/source, and the pyfwg package is at the root.
 sys.path.insert(0, os.path.abspath('../..'))
 
+
+# --- Function to dynamically read the version from __init__.py ---
+def get_version():
+    """
+    Reads the version string from the package's __init__.py file.
+    """
+    # Construct the path to the __init__.py file.
+    init_py_path = os.path.join(os.path.dirname(__file__), '..', '..', 'pyfwg', '__init__.py')
+    with open(init_py_path, "r") as f:
+        version_file = f.read()
+
+    # Use regex to find the __version__ string.
+    version_match = re.search(r"^__version__ = ['\"]([^'\"]*)['\"]", version_file, re.M)
+
+    if version_match:
+        return version_match.group(1)
+
+    raise RuntimeError("Unable to find version string.")
+
+# The full version, including alpha/beta/rc tags, read dynamically.
+release = get_version()
+# The short X.Y version.
+version = '.'.join(release.split('.')[:2])
 
 # -- Project information -----------------------------------------------------
 project = 'pyfwg'

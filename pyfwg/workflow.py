@@ -682,6 +682,7 @@ class MorphingWorkflowGlobal(_MorphingWorkflowBase):
     (GCMs) and SSP scenarios.
 
     The intended usage is to follow the three-step process:
+
     1. `map_categories()`: Analyze input filenames to extract categories.
     2. `configure_and_preview()`: Define and validate all execution parameters
        and preview the results.
@@ -840,6 +841,7 @@ class MorphingWorkflowEurope(_MorphingWorkflowBase):
     pairs and RCP scenarios.
 
     The intended usage is to follow the three-step process:
+
     1. `map_categories()`: Analyze input filenames to extract categories.
     2. `configure_and_preview()`: Define and validate all execution parameters
        and preview the results.
