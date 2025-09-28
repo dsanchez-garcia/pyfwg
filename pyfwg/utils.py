@@ -176,7 +176,7 @@ def uhi_morph(*,
     """Applies only the Urban Heat Island (UHI) effect to an EPW file.
 
     This function is a direct wrapper for the `UHI_Morph` class within the
-    FutureWeatherGenerator tool. It modifies an EPW file to reflect the
+    Future Weather Generator tool. It modifies an EPW file to reflect the
     climate of a different Local Climate Zone (LCZ) without applying future
     climate change scenarios.
 

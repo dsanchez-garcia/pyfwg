@@ -7,14 +7,14 @@
 
 A robust, step-by-step Python workflow manager for the [Future Weather Generator](https://future-weather-generator.adai.pt/) command-line tool.
 
-`pyfwg` provides a safe and intuitive way to automate the morphing of EnergyPlus Weather (EPW) files for future climate scenarios. It supports both the **Global** and **Europe-specific** versions of the FutureWeatherGenerator tool.
+`pyfwg` provides a safe and intuitive way to automate the morphing of EnergyPlus Weather (EPW) files for future climate scenarios. It supports both the **Global** and **Europe-specific** versions of the Future Weather Generator tool.
 
 ## Key Features
 
 - **Multiple Interfaces**: Use simple one-shot functions for direct tasks, advanced workflow classes for custom renaming, or a powerful iterator for large-scale parametric studies.
 - **Step-by-Step Control**: The advanced workflow allows you to map, configure, preview, and then execute, preventing errors before they happen.
 - **Flexible Filename Mapping**: Handle both structured (regex-based) and unstructured (keyword-based) filenames with ease.
-- **Built-in Validation**: Automatically validates all `FutureWeatherGenerator` parameters before execution, catching typos and invalid values (e.g., unavailable LCZs).
+- **Built-in Validation**: Automatically validates all Future Weather Generator parameters before execution, catching typos and invalid values (e.g., unavailable LCZs).
 - **Excel Integration**: Export templates and load run configurations directly from Excel files for easy parametric analysis.
 - **Clear and Organized Output**: Automatically renames and organizes the final `.epw` and `.stat` files into a clean directory structure.
 
@@ -32,7 +32,7 @@ Before using `pyfwg`, you need to have the following installed and configured:
 
 *   **Python 3.9+**
 *   **Java**: The `java` command must be accessible from your system's terminal (i.e., it must be in your system's PATH).
-*   **FutureWeatherGenerator**: You must download the appropriate `.jar` file from the `official website <https://future-weather-generator.adai.pt/>`_.
+*   **Future Weather Generator**: You must download the appropriate `.jar` file from the `official website <https://future-weather-generator.adai.pt/>`_.
     *   The **Global Tool** (`FutureWeatherGenerator_vX.X.X.jar`) has been tested with versions **v3.0.0** and **v3.0.1**.
     *   The **Europe Tool** (`FutureWeatherGenerator_Europe_vX.X.X.jar`) has been tested with version **v1.0.1**.
 ## Installation
@@ -146,7 +146,7 @@ iterator.run_morphing_workflows()
 ```
 ## Using the Europe-Specific Tool
 
-The `pyfwg` library also fully supports the Europe-specific version of the FutureWeatherGenerator. The usage is nearly identical to the global version, with the following key differences:
+The `pyfwg` library also fully supports the Europe-specific version of the Future Weather Generator. The usage is nearly identical to the global version, with the following key differences:
 
 *   **Class and Function Names**: You must import and use the Europe-specific versions: `MorphingWorkflowEurope` and `morph_epw_europe`.
 *   **JAR File Path**: Ensure your `fwg_jar_path` points to the correct `FutureWeatherGenerator_Europe_vX.X.X.jar` file.

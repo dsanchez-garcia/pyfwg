@@ -21,7 +21,7 @@ from .utils import _robust_rmtree, check_lcz_availability
 #                      temp_base_dir: str = './morphing_temp_results',
 #                      fwg_show_tool_output: bool = False,
 #                      fwg_params: Optional[Dict[str, Any]] = None,
-#                      # --- Explicit FutureWeatherGenerator Arguments ---
+#                      # --- Explicit Future Weather Generator Arguments ---
 #                      fwg_gcms: Optional[List[str]] = None,
 #                      fwg_create_ensemble: bool = True,
 #                      fwg_winter_sd_shift: float = 0.0,
@@ -35,10 +35,10 @@ from .utils import _robust_rmtree, check_lcz_availability
 #                      fwg_add_uhi: bool = True,
 #                      fwg_epw_original_lcz: int = 14,
 #                      fwg_target_uhi_lcz: int = 1):
-#     """Performs a direct, one-shot morphing using the GLOBAL FutureWeatherGenerator tool.
+#     """Performs a direct, one-shot morphing using the GLOBAL Future Weather Generator tool.
 #
 #     This function provides a simple interface to the morphing process while
-#     still allowing full customization of the FutureWeatherGenerator tool. It
+#     still allowing full customization of the Future Weather Generator tool. It
 #     internally uses the `MorphingWorkflowGlobal` class to validate all
 #     parameters before execution and runs the entire workflow in a single call.
 #
@@ -185,7 +185,7 @@ def morph_epw_global(*,
                      temp_base_dir: str = './morphing_temp_results',
                      fwg_show_tool_output: bool = False,
                      fwg_params: Optional[Dict[str, Any]] = None,
-                     # --- Explicit FutureWeatherGenerator Arguments ---
+                     # --- Explicit Future Weather Generator Arguments ---
                      fwg_gcms: Optional[List[str]] = None,
                      fwg_create_ensemble: bool = True,
                      fwg_winter_sd_shift: float = 0.0,
@@ -199,10 +199,10 @@ def morph_epw_global(*,
                      fwg_add_uhi: bool = True,
                      fwg_epw_original_lcz: int = 14,
                      fwg_target_uhi_lcz: int = 1):
-    """Performs a direct, one-shot morphing using the GLOBAL FutureWeatherGenerator tool.
+    """Performs a direct, one-shot morphing using the GLOBAL Future Weather Generator tool.
 
     This function provides a simple interface to the morphing process while
-    still allowing full customization of the FutureWeatherGenerator tool. It
+    still allowing full customization of the Future Weather Generator tool. It
     internally uses the `MorphingWorkflowGlobal` class to validate all
     parameters before execution and runs the entire workflow in a single call.
 
@@ -348,7 +348,7 @@ def morph_epw_global(*,
 #                      temp_base_dir: str = './morphing_temp_results_europe',
 #                      fwg_show_tool_output: bool = False,
 #                      fwg_params: Optional[Dict[str, Any]] = None,
-#                      # --- Explicit FutureWeatherGenerator Arguments ---
+#                      # --- Explicit Future Weather Generator Arguments ---
 #                      fwg_rcm_pairs: Optional[List[str]] = None,
 #                      fwg_create_ensemble: bool = True,
 #                      fwg_winter_sd_shift: float = 0.0,
@@ -362,7 +362,7 @@ def morph_epw_global(*,
 #                      fwg_add_uhi: bool = True,
 #                      fwg_epw_original_lcz: int = 14,
 #                      fwg_target_uhi_lcz: int = 1):
-#     """Performs a direct, one-shot morphing using the EUROPE-specific FutureWeatherGenerator tool.
+#     """Performs a direct, one-shot morphing using the EUROPE-specific Future Weather Generator tool.
 #
 #     This function provides a simple interface to the morphing process while
 #     still allowing full customization of the Europe-specific FWG tool. It
@@ -504,7 +504,7 @@ def morph_epw_europe(*,
                      temp_base_dir: str = './morphing_temp_results_europe',
                      fwg_show_tool_output: bool = False,
                      fwg_params: Optional[Dict[str, Any]] = None,
-                     # --- Explicit FutureWeatherGenerator Arguments ---
+                     # --- Explicit Future Weather Generator Arguments ---
                      fwg_rcm_pairs: Optional[List[str]] = None,
                      fwg_create_ensemble: bool = True,
                      fwg_winter_sd_shift: float = 0.0,
@@ -518,7 +518,7 @@ def morph_epw_europe(*,
                      fwg_add_uhi: bool = True,
                      fwg_epw_original_lcz: int = 14,
                      fwg_target_uhi_lcz: int = 1):
-    """Performs a direct, one-shot morphing using the EUROPE-specific FutureWeatherGenerator tool.
+    """Performs a direct, one-shot morphing using the EUROPE-specific Future Weather Generator tool.
 
     This function provides a simple interface to the morphing process while
     still allowing full customization of the Europe-specific FWG tool. It

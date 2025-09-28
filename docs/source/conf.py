@@ -35,7 +35,7 @@ version = '.'.join(release.split('.')[:2])
 project = 'pyfwg'
 copyright = '2025, Daniel Sánchez-García'
 author = 'Daniel Sánchez-García'
-release = '0.0.1' # The full version, including alpha/beta/rc tags
+# release = '0.0.1' # The full version, including alpha/beta/rc tags
 
 # -- General configuration ---------------------------------------------------
 # Add any Sphinx extension module names here, as strings.

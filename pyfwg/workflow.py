@@ -675,7 +675,7 @@ class _MorphingWorkflowBase:
                 logging.warning(f"Could not find a rename plan for file '{generated_file}'. It will be left in the temp directory.")
 
 class MorphingWorkflowGlobal(_MorphingWorkflowBase):
-    """Manages the morphing workflow for the GLOBAL FutureWeatherGenerator tool.
+    """Manages the morphing workflow for the GLOBAL Future Weather Generator tool.
 
     This class inherits all the step-by-step logic from the base workflow
     and is pre-configured to work specifically with the global climate models
@@ -834,7 +834,7 @@ class MorphingWorkflowGlobal(_MorphingWorkflowBase):
         )
 
 class MorphingWorkflowEurope(_MorphingWorkflowBase):
-    """Manages the morphing workflow for the EUROPE-specific FutureWeatherGenerator tool.
+    """Manages the morphing workflow for the EUROPE-specific Future Weather Generator tool.
 
     This class inherits all the step-by-step logic from the base workflow
     and is pre-configured to work specifically with the European GCM-RCM model

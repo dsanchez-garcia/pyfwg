@@ -10,9 +10,9 @@ Welcome to pyfwg's documentation! (Version |release|)
 
 This documentation provides detailed information on the library's three main interfaces, designed to cater to different levels of complexity:
 
-*   **High-Level Functions (`morph_epw_global`, `morph_epw_europe`)**: For simple, one-shot morphing tasks where you need direct control over the tool's parameters without complex file renaming.
-*   **Advanced Workflow Classes (`MorphingWorkflowGlobal`, `MorphingWorkflowEurope`)**: For complex projects requiring custom file renaming based on filename parsing, and full, step-by-step control over the validation and execution process.
-*   **Parametric Iterator (`MorphingIterator`)**: The most powerful feature, designed for automating large batches of simulations defined in a Pandas DataFrame or an Excel file, making parametric analysis simple and structured.
+*   **High-Level Functions** (``morph_epw_global``, ``morph_epw_europe``): For simple, one-shot morphing tasks where you need direct control over the tool's parameters without complex file renaming.
+*   **Advanced Workflow Classes** (``MorphingWorkflowGlobal``, ``MorphingWorkflowEurope``): For complex projects requiring custom file renaming based on filename parsing, and full, step-by-step control over the validation and execution process.
+*   **Parametric Iterator** (``MorphingIterator``): The most powerful feature, designed for automating large batches of morphing workflows defined in a Pandas DataFrame or an Excel file, making parametric analysis simple and structured.
 
 Requirements
 ------------
