@@ -32,6 +32,7 @@ available_lczs = get_available_lczs(
 iterator.set_default_values(
     fwg_jar_path=r"D:\OneDrive - Universidad de Cádiz (uca.es)\Programas\FutureWeatherGenerator_v3.0.1.jar",
     output_filename_pattern='{city}_{uhi}_gcm-{fwg_gcms}_{ssp}_{year}', # to avoid overwriting files, you should include in the filename pattern the parameters that change between runs
+    # output_filename_pattern='{city}_{uhi}_gcm-nodif_{ssp}_{year}',  # to avoid overwriting files, you should include in the filename pattern the parameters that change between runs
 
     # Acabamos de comprobar que los LCZs 2 y 3 están disponibles para todos los EPWs, por lo que procedemos a usarlos como valores por defecto.
     # En caso de que no coincidieran, habría que definir los LCZs en los parámetros que cambian, en el siguiente paso
@@ -56,9 +57,16 @@ user_df.loc[0] = {
 }
 
 # --- Run 2: Run the second EPW file with a different GCM ---
+# user_df.loc[1] = {
+#     'epw_paths': epw_files[1],
+#     'final_output_dir': './results/1',
+#     'fwg_gcms': ['MIROC6'],
+#     'fwg_epw_original_lcz': 2,
+#     'fwg_target_uhi_lcz': 3,
+# }
 user_df.loc[1] = {
-    'epw_paths': epw_files[1],
-    'final_output_dir': './results/1',
+    'epw_paths': epw_files[0],
+    'final_output_dir': './results/0',
     'fwg_gcms': ['MIROC6'],
     'fwg_epw_original_lcz': 2,
     'fwg_target_uhi_lcz': 3,
@@ -73,8 +81,8 @@ user_df.loc[1] = {
 iterator.generate_morphing_workflows(
     runs_df=user_df,
     keyword_mapping=mapping_rules,
-    raise_on_overwrite=False
+    raise_on_overwrite=True
 
 )
-
+##
 iterator.run_morphing_workflows()
