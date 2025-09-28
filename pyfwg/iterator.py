@@ -283,7 +283,8 @@ class MorphingIterator:
     def generate_morphing_workflows(self,
                                     runs_df: pd.DataFrame,
                                     input_filename_pattern: Optional[str] = None,
-                                    keyword_mapping: Optional[Dict] = None):
+                                    keyword_mapping: Optional[Dict] = None,
+                                    raise_on_overwrite: bool = True):
         """Generates a detailed execution plan and prepares all workflow instances.
 
         This method is the core of the planning phase. It orchestrates the
@@ -298,7 +299,7 @@ class MorphingIterator:
         3.  **Enriches the Plan**: It adds new columns (`cat_*`) to the plan
             DataFrame, showing the extracted categories for each run.
         4.  **Validates for Filename Overwrites**: It identifies all parameters
-            AND categories that vary between runs and ensures they are included
+            and categories that vary between runs and ensures they are included
             as placeholders in the `output_filename_pattern` to prevent data loss.
         5.  **Stores the Plan**: The final, validated DataFrame is stored in
             `self.morphing_workflows_plan_df` for user inspection.
@@ -315,10 +316,14 @@ class MorphingIterator:
             keyword_mapping (Optional[Dict], optional): A dictionary of keyword
                 rules for filename mapping, applied as a default to *every* run
                 unless overridden in the DataFrame.
+            raise_on_overwrite (bool, optional): If True (default), raises a
+                ValueError if a potential filename overwrite is detected. If
+                False, it will only issue a warning and continue.
 
         Raises:
-            ValueError: If a parameter or category varies between runs but is not included
-                as a placeholder in the `output_filename_pattern`.
+            ValueError: If `raise_on_overwrite` is True and a parameter or
+                category varies between runs but is not included as a
+                placeholder in the `output_filename_pattern`.
         """
         logging.info("Generating detailed execution plan and preparing workflows...")
 
@@ -424,11 +429,18 @@ class MorphingIterator:
         # Check if any varying parameter or category is missing from the filename pattern.
         missing_placeholders = varying_placeholders - pattern_placeholders
         if missing_placeholders:
-            raise ValueError(
-                f"Potential file overwrite detected! The following parameters or categories vary between runs but are not "
-                f"included as placeholders in the 'output_filename_pattern': {list(missing_placeholders)}. "
-                f"Please add them to the pattern to ensure unique filenames."
+            # Construct the message first.
+            message = (
+                f"Potential file overwrite detected! The following parameters or categories vary "
+                f"between runs but are not included as placeholders in the 'output_filename_pattern': "
+                f"{list(missing_placeholders)}. Please add them to the pattern to ensure unique filenames."
             )
+            # Check the new flag to decide whether to raise an error or issue a warning.
+            if raise_on_overwrite:
+                raise ValueError(message)
+            else:
+                logging.warning(message)
+                logging.warning("Execution will continue, but output files may be overwritten.")
 
         logging.info("Filename validation passed. No overwrites detected.")
 
