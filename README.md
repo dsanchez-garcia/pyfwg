@@ -20,7 +20,7 @@ A robust, step-by-step Python workflow manager for the [Future Weather Generator
 
 ## What's New in Version 0.2.1?
 
-Version 0.2.1 builds upon the major 0.2.0 update, introducing powerful new capabilities for parametric analysis, expanded tool support, and improved validation. For a full list of changes, see the [CHANGELOG.md](https://github.com/dsanchez-garcia/pyfwg/blob/main/CHANGELOG.md) file.
+Version 0.2.1 builds upon the major 0.2.0 update, introducing powerful new capabilities for parametric analysis, expanded tool support, and improved validation. For a full list of changes, see the [CHANGELOG](https://github.com/dsanchez-garcia/pyfwg/blob/main/CHANGELOG.md) file.
 
 - **Parametric Analysis with `MorphingIterator`**: The biggest new feature is the `MorphingIterator` class, designed to automate large batches of simulations. Define all your runs in a Pandas DataFrame or an Excel file and execute them with a single command. The iterator now includes robust **overwrite prevention**, which intelligently validates your run configuration and provides a comprehensive report of all potential filename collisions before execution, making it much easier to debug complex setups.
 -   **Support for the Europe-Specific Tool**: `pyfwg` now fully supports the European version of the FWG tool with the `MorphingWorkflowEurope` class and `morph_epw_europe` function.
@@ -33,7 +33,7 @@ Before using `pyfwg`, you need to have the following installed and configured:
 
 *   **Python 3.9+**
 *   **Java**: The `java` command must be accessible from your system's terminal (i.e., it must be in your system's PATH).
-*   **Future Weather Generator**: You must download the appropriate `.jar` file from the `official website <https://future-weather-generator.adai.pt/>`_.
+*   **Future Weather Generator**: You must download the appropriate `.jar` file from the [official website](https://future-weather-generator.adai.pt/).
     *   The **Global Tool** (`FutureWeatherGenerator_vX.X.X.jar`) has been tested with versions **v3.0.0** and **v3.0.1**.
     *   The **Europe Tool** (`FutureWeatherGenerator_Europe_vX.X.X.jar`) has been tested with version **v1.0.1**.
 ## Installation
@@ -180,7 +180,7 @@ The full documentation is available at [pyfwg.readthedocs.io](https://pyfwg.read
 
 ## Changelog
 
-A detailed history of all changes made to the library is available in the [CHANGELOG.md](https://github.com/dsanchez-garcia/pyfwg/blob/main/CHANGELOG.md) file.
+A detailed history of all changes made to the library is available in the [CHANGELOG](https://github.com/dsanchez-garcia/pyfwg/blob/main/CHANGELOG.md) file.
 
 ## Acknowledgements
 
