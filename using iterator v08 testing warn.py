@@ -81,7 +81,7 @@ user_df.loc[1] = {
 iterator.generate_morphing_workflows(
     runs_df=user_df,
     keyword_mapping=mapping_rules,
-    raise_on_overwrite=True
+    raise_on_overwrite=False
 
 )
 ##

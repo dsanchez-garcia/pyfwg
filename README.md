@@ -18,13 +18,14 @@ A robust, step-by-step Python workflow manager for the [Future Weather Generator
 - **Excel Integration**: Export templates and load run configurations directly from Excel files for easy parametric analysis.
 - **Clear and Organized Output**: Automatically renames and organizes the final `.epw` and `.stat` files into a clean directory structure.
 
-## What's New in Version 0.2.0?
+## What's New in Version 0.2.1?
 
-Version 0.2.0 is a major update that introduces powerful new capabilities for parametric analysis and expanded tool support. For a full list of changes, see the [CHANGELOG.md](CHANGELOG.md) file.
+Version 0.2.1 builds upon the major 0.2.0 update, introducing powerful new capabilities for parametric analysis, expanded tool support, and improved validation. For a full list of changes, see the [CHANGELOG.md](https://github.com/dsanchez-garcia/pyfwg/blob/main/CHANGELOG.md) file.
 
--   **Parametric Analysis with `MorphingIterator`**: The biggest new feature is the `MorphingIterator` class, designed to automate large batches of simulations. Define all your runs in a Pandas DataFrame or an Excel file and execute them with a single command.
+- **Parametric Analysis with `MorphingIterator`**: The biggest new feature is the `MorphingIterator` class, designed to automate large batches of simulations. Define all your runs in a Pandas DataFrame or an Excel file and execute them with a single command. The iterator now includes robust **overwrite prevention**, which intelligently validates your run configuration and provides a comprehensive report of all potential filename collisions before execution, making it much easier to debug complex setups.
 -   **Support for the Europe-Specific Tool**: `pyfwg` now fully supports the European version of the FWG tool with the `MorphingWorkflowEurope` class and `morph_epw_europe` function.
--   **Important API Change**: The original `morph_epw` function has been renamed to `morph_epw_global` to distinguish it from the new Europe-specific function. Also, the `MorphingWorkflow` class has been renamed to `MorphingWorkflowGlobal` to reflect the new new Europe-specific class.
+-   **Pre-flight Validation**: Workflows now automatically validate Local Climate Zone (LCZ) availability before running a simulation, preventing common errors. New utility functions like `get_available_lczs` have also been added to help you explore your EPW files.
+-   **Important API Change**: The original `morph_epw` function has been renamed to `morph_epw_global` to distinguish it from the new Europe-specific function. Similarly, the `MorphingWorkflow` class is now `MorphingWorkflowGlobal`.
 
 ## Requirements
 

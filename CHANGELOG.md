@@ -10,6 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Your next great feature!
 
+## [0.2.1] - 2025-09-29
+
+### Changed
+- Improved overwrite validation in `MorphingIterator`. It now collects and reports all colliding filenames in a single, comprehensive error message, instead of failing on the first one found. This makes debugging `output_filename_pattern` configurations much easier.
+
 ## [0.2.0] - 2025-09-28
 
 ### Added
@@ -43,6 +48,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Initial bug fixes and improvements to the first public release.
 
-[Unreleased]: https://github.com/dsanchez-garcia/pyfwg/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/dsanchez-garcia/pyfwg/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/dsanchez-garcia/pyfwg/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/dsanchez-garcia/pyfwg/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/dsanchez-garcia/pyfwg/releases/tag/v0.1.1

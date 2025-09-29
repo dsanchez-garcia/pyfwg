@@ -68,7 +68,7 @@ except ImportError:
 # --- Public API Definition ---
 
 # Define the official version of the library.
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 
 # Import the main classes for the advanced, step-by-step workflows.
 # This makes them accessible as `pyfwg.MorphingWorkflowGlobal`.
