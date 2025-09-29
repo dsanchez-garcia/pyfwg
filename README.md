@@ -180,7 +180,7 @@ The full documentation is available at [pyfwg.readthedocs.io](https://pyfwg.read
 
 ## Changelog
 
-A detailed history of all changes made to the library is available in the [CHANGELOG.md](CHANGELOG.md) file.
+A detailed history of all changes made to the library is available in the [CHANGELOG.md](https://github.com/dsanchez-garcia/pyfwg/blob/main/CHANGELOG.md) file.
 
 ## Acknowledgements
 
@@ -188,4 +188,4 @@ This library would not be possible without the foundational work of **Eugénio R
 
 ## License
 
-This project is licensed under the GNU (GPLv3) License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the GNU (GPLv3) License - see the [LICENSE](https://github.com/dsanchez-garcia/pyfwg/blob/main/LICENSE) file for details.
