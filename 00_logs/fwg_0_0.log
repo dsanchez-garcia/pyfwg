@@ -1,0 +1,21 @@
+2025-12-28 10:37:35.743 [INFO   ] futureweathergenerator.logging.FWGLogger.initializeLogging - FWG Logging system initialized with file logging
+2025-12-28 10:37:35.843 [INFO   ] futureweathergenerator.Main.main - Command-line arguments provided. Running in CLI mode.
+2025-12-28 10:37:35.848 [INFO   ] futureweathergenerator.Main.runCLI - Starting CLI mode with 4 arguments.
+2025-12-28 10:45:13.435 [INFO   ] futureweathergenerator.logging.FWGLogger.initializeLogging - FWG Logging system initialized with file logging
+2025-12-28 10:45:13.477 [INFO   ] futureweathergenerator.Main.main - Command-line arguments provided. Running in CLI mode.
+2025-12-28 10:45:13.478 [INFO   ] futureweathergenerator.Main.runCLI - Starting CLI mode with 4 arguments.
+2025-12-28 10:45:56.805 [INFO   ] futureweathergenerator.logging.FWGLogger.initializeLogging - FWG Logging system initialized with file logging
+2025-12-28 10:45:56.837 [INFO   ] futureweathergenerator.Main.main - Command-line arguments provided. Running in CLI mode.
+2025-12-28 10:45:56.839 [INFO   ] futureweathergenerator.Main.runCLI - Starting CLI mode with 4 arguments.
+2025-12-28 10:47:02.734 [INFO   ] futureweathergenerator.logging.FWGLogger.initializeLogging - FWG Logging system initialized with file logging
+2025-12-28 10:47:02.759 [INFO   ] futureweathergenerator.Main.main - Command-line arguments provided. Running in CLI mode.
+2025-12-28 10:47:02.761 [INFO   ] futureweathergenerator.Main.runCLI - Starting CLI mode with 4 arguments.
+2025-12-28 10:47:33.113 [INFO   ] futureweathergenerator.logging.FWGLogger.initializeLogging - FWG Logging system initialized with file logging
+2025-12-28 10:47:33.137 [INFO   ] futureweathergenerator.Main.main - Command-line arguments provided. Running in CLI mode.
+2025-12-28 10:47:33.139 [INFO   ] futureweathergenerator.Main.runCLI - Starting CLI mode with 4 arguments.
+2025-12-28 10:50:51.653 [INFO   ] futureweathergenerator.logging.FWGLogger.initializeLogging - FWG Logging system initialized with file logging
+2025-12-28 10:50:51.692 [INFO   ] futureweathergenerator.Main.main - Command-line arguments provided. Running in CLI mode.
+2025-12-28 10:50:51.696 [INFO   ] futureweathergenerator.Main.runCLI - Starting CLI mode with 4 arguments.
+2025-12-28 10:53:26.032 [INFO   ] futureweathergenerator.logging.FWGLogger.initializeLogging - FWG Logging system initialized with file logging
+2025-12-28 10:53:26.059 [INFO   ] futureweathergenerator.Main.main - Command-line arguments provided. Running in CLI mode.
+2025-12-28 10:53:26.059 [INFO   ] futureweathergenerator.Main.runCLI - Starting CLI mode with 4 arguments.

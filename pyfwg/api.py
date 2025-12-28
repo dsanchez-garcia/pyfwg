@@ -198,7 +198,8 @@ def morph_epw_global(*,
                      fwg_diffuse_irradiation_model: int = 1,
                      fwg_add_uhi: bool = True,
                      fwg_epw_original_lcz: int = 14,
-                     fwg_target_uhi_lcz: int = 1):
+                     fwg_target_uhi_lcz: int = 1,
+                     fwg_version: Optional[Union[str, int]] = None):
     """Performs a direct, one-shot morphing using the GLOBAL Future Weather Generator tool.
 
     This function provides a simple interface to the morphing process while
@@ -281,7 +282,8 @@ def morph_epw_global(*,
         fwg_diffuse_irradiation_model=fwg_diffuse_irradiation_model,
         fwg_add_uhi=fwg_add_uhi,
         fwg_epw_original_lcz=fwg_epw_original_lcz,
-        fwg_target_uhi_lcz=fwg_target_uhi_lcz
+        fwg_target_uhi_lcz=fwg_target_uhi_lcz,
+        fwg_version=fwg_version
     )
 
     # Block execution if the configuration was found to be invalid.
@@ -517,7 +519,8 @@ def morph_epw_europe(*,
                      fwg_diffuse_irradiation_model: int = 1,
                      fwg_add_uhi: bool = True,
                      fwg_epw_original_lcz: int = 14,
-                     fwg_target_uhi_lcz: int = 1):
+                     fwg_target_uhi_lcz: int = 1,
+                     fwg_version: Optional[Union[str, int]] = None):
     """Performs a direct, one-shot morphing using the EUROPE-specific Future Weather Generator tool.
 
     This function provides a simple interface to the morphing process while
@@ -601,7 +604,8 @@ def morph_epw_europe(*,
         fwg_diffuse_irradiation_model=fwg_diffuse_irradiation_model,
         fwg_add_uhi=fwg_add_uhi,
         fwg_epw_original_lcz=fwg_epw_original_lcz,
-        fwg_target_uhi_lcz=fwg_target_uhi_lcz
+        fwg_target_uhi_lcz=fwg_target_uhi_lcz,
+        fwg_version=fwg_version
     )
 
     # Block execution if the configuration was found to be invalid.

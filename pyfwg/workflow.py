@@ -8,7 +8,7 @@ import logging
 from typing import List, Optional, Dict, Any, Union
 
 # Import the functions from the utils.py file
-from .utils import check_lcz_availability, _robust_rmtree
+from .utils import check_lcz_availability, _robust_rmtree, detect_fwg_version
 
 # Import constants from the local constants.py file
 from .constants import (
@@ -307,7 +307,10 @@ class _MorphingWorkflowBase:
                                     fwg_diffuse_irradiation_model: int,
                                     fwg_add_uhi: bool,
                                     fwg_epw_original_lcz: int,
-                                    fwg_target_uhi_lcz: int):
+
+
+                                    fwg_target_uhi_lcz: int,
+                                    fwg_version: Optional[Union[str, int]] = None):
         """(Private) Base method for configuring, validating, and previewing the plan.
 
         This method is the core of the combined Step 2. It is called by the
@@ -351,13 +354,32 @@ class _MorphingWorkflowBase:
             'diffuse_irradiation_model': fwg_diffuse_irradiation_model,
             'add_uhi': fwg_add_uhi,
             'epw_original_lcz': fwg_epw_original_lcz,
-            'target_uhi_lcz': fwg_target_uhi_lcz
+            'epw_original_lcz': fwg_epw_original_lcz,
+            'target_uhi_lcz': fwg_target_uhi_lcz,
+            'fwg_version': fwg_version
         }
         # Apply the overrides. Any value explicitly passed will replace the one from fwg_params.
         final_fwg_params.update(overrides)
 
         # Validate the final set of parameters and store the result in the instance's state.
         self.is_config_valid = self._validate_fwg_params(final_fwg_params)
+
+        # --- 1b. Resolve FWG Version ---
+        # If the version wasn't explicitly provided, try to detect it from the JAR path.
+        if final_fwg_params.get('fwg_version') is None:
+            try:
+                detected_version = detect_fwg_version(fwg_jar_path)
+                final_fwg_params['fwg_version'] = detected_version
+                logging.info(f"Auto-detected FWG version: {detected_version}")
+            except ValueError as e:
+                # If we can't detect it, we can't proceed with preview/execution safely 
+                # unless we default to something. But strict fail is better here.
+                logging.error(f"Version detection failed: {e}")
+                self.is_config_valid = False
+        
+        # Ensure version is stored as a string for consistency
+        if final_fwg_params.get('fwg_version'):
+            final_fwg_params['fwg_version'] = str(final_fwg_params['fwg_version'])
 
         # Create a user-friendly version for review, filling in defaults if needed.
         review_params = final_fwg_params.copy()
@@ -523,7 +545,9 @@ class _MorphingWorkflowBase:
                     original_lcz=fwg_params.get('epw_original_lcz'),
                     target_lcz=fwg_params.get('target_uhi_lcz'),
                     fwg_jar_path=self.inputs['fwg_jar_path'],
-                    java_class_path_prefix=self.java_class_path_prefix
+
+                    java_class_path_prefix=self.java_class_path_prefix,
+                    fwg_version=fwg_params.get('fwg_version')
                 )
 
                 # If validation fails (returns anything other than True), log the error and skip this file.
@@ -586,24 +610,12 @@ class _MorphingWorkflowBase:
             return False
 
         formatted_params = self.inputs['fwg_params_formatted']
+        version = self.inputs['fwg_params'].get('fwg_version', '3') # Default to legacy if missing
 
-        # Build the command for actual execution.
-        class_path = f"{self.java_class_path_prefix}.Morph"
-        command = [
-            'java', '-cp', self.inputs['fwg_jar_path'], class_path,
-            os.path.abspath(temp_epw_path),
-            formatted_params['models'],
-            formatted_params['ensemble'],
-            formatted_params['sd_shift'],
-            formatted_params['month_transition_hours'],
-            os.path.abspath(temp_output_dir) + '/',
-            formatted_params['do_multithred_computation'],
-            formatted_params['interpolation_method_id'],
-            formatted_params['do_limit_variables'],
-            formatted_params['solar_hour_adjustment_option'],
-            formatted_params['diffuse_irradiation_model_option'],
-            formatted_params['uhi_combined']
-        ]
+        if version.startswith('4'):
+            command = self._build_command_v4(epw_path, temp_epw_path, temp_output_dir)
+        else:
+            command = self._build_command_v3(epw_path, temp_epw_path, temp_output_dir, formatted_params)
 
         # Build a separate, "printable" version for logging.
         display_command_list = command[:]
@@ -630,6 +642,142 @@ class _MorphingWorkflowBase:
             if e.stdout: logging.error(f"STDOUT:\n{e.stdout}")
             if e.stderr: logging.error(f"STDERR:\n{e.stderr}")
             return False
+
+    def _build_command_v3(self, original_epw_path: str, temp_epw_path: str, temp_output_dir: str, formatted_params: Dict[str, str]) -> List[str]:
+        """(Private) Constructs the legacy Java command (v3.x / Europe v1.x)."""
+        class_path = f"{self.java_class_path_prefix}.Morph"
+        command = [
+            'java', '-cp', self.inputs['fwg_jar_path'], class_path,
+            os.path.abspath(temp_epw_path),
+            formatted_params['models'],
+            formatted_params['ensemble'],
+            formatted_params['sd_shift'],
+            formatted_params['month_transition_hours'],
+            os.path.abspath(temp_output_dir) + '/',
+            formatted_params['do_multithred_computation'],
+            formatted_params['interpolation_method_id'],
+            formatted_params['do_limit_variables'],
+            formatted_params['solar_hour_adjustment_option'],
+            formatted_params['diffuse_irradiation_model_option'],
+            formatted_params['uhi_combined']
+        ]
+        return command
+
+    def _build_command_v4(self, original_epw_path: str, temp_epw_path: str, temp_output_dir: str) -> List[str]:
+        """(Private) Constructs the new FWG v4.x Java command using key-value pairs."""
+        params = self.inputs['fwg_params']
+        
+        # --- Map Integer Enums to String Values for v4 ---
+        # Interpolation Method: {0: 'IDW', 1: 'BI', 2: 'AVG4P', 3: 'NP'}
+        interp_map = {0: 'IDW', 1: 'BI', 2: 'AVG4P', 3: 'NP'}
+        grid_interp = interp_map.get(params.get('interpolation_method_id'), 'IDW')
+
+        # Solar Correction: {0: 'None', 1: 'By_Month', 2: 'By_Day'}
+        solar_map = {0: 'None', 1: 'By_Month', 2: 'By_Day'}
+        solar_corr = solar_map.get(params.get('solar_hour_adjustment'), 'By_Month')
+
+        # Diffuse Method: {0: 'Ridley_Boland_Lauret_2010', 1: 'Engerer_2015', 2: 'Paulescu_Blaga_2019'}
+        diffuse_map = {0: 'Ridley_Boland_Lauret_2010', 1: 'Engerer_2015', 2: 'Paulescu_Blaga_2019'}
+        diffuse_method = diffuse_map.get(params.get('diffuse_irradiation_model'), 'Engerer_2015')
+
+        # Models List
+        models = params.get(self.model_arg_name, [])
+        models_str = ",".join(models) if isinstance(models, list) else str(models)
+
+        # UHI String: true:orig:target or false
+        add_uhi = str(params.get('add_uhi', True)).lower()
+        if add_uhi == 'true':
+            uhi_val = f"true:{params.get('epw_original_lcz', 14)}:{params.get('target_uhi_lcz', 1)}"
+        else:
+            uhi_val = "false"
+
+        # Construct the CLI arguments
+        command = [
+            'java', '-jar', self.inputs['fwg_jar_path'],
+            f'-epw={os.path.abspath(temp_epw_path)}',
+            f'-output_folder={os.path.abspath(temp_output_dir)}{os.sep}', # Ensure trailing slash if tool needs it
+            f'-models={models_str}',
+            f'-ensemble={str(params.get("create_ensemble", True)).lower()}',
+            f'-temp_shift_winter={params.get("winter_sd_shift", 0.0)}',
+            f'-temp_shift_summer={params.get("summer_sd_shift", 0.0)}',
+            f'-smooth_hours={params.get("month_transition_hours", 72)}',
+            f'-multithread={str(params.get("use_multithreading", True)).lower()}',
+            f'-grid_interpolation_method={grid_interp}',
+            f'-solar_correction={solar_corr}',
+            f'-diffuse_method={diffuse_method}',
+            f'-uhi={uhi_val}',
+            '-output_type=EPW'
+        ]
+        
+        return command
+
+    def _build_command_v3(self, original_epw_path: str, temp_epw_path: str, temp_output_dir: str, formatted_params: Dict[str, str]) -> List[str]:
+        """(Private) Constructs the legacy Java command (v3.x / Europe v1.x)."""
+        class_path = f"{self.java_class_path_prefix}.Morph"
+        command = [
+            'java', '-cp', self.inputs['fwg_jar_path'], class_path,
+            os.path.abspath(temp_epw_path),
+            formatted_params['models'],
+            formatted_params['ensemble'],
+            formatted_params['sd_shift'],
+            formatted_params['month_transition_hours'],
+            os.path.abspath(temp_output_dir) + '/',
+            formatted_params['do_multithred_computation'],
+            formatted_params['interpolation_method_id'],
+            formatted_params['do_limit_variables'],
+            formatted_params['solar_hour_adjustment_option'],
+            formatted_params['diffuse_irradiation_model_option'],
+            formatted_params['uhi_combined']
+        ]
+        return command
+
+    def _build_command_v4(self, original_epw_path: str, temp_epw_path: str, temp_output_dir: str) -> List[str]:
+        """(Private) Constructs the new FWG v4.x Java command using key-value pairs."""
+        params = self.inputs['fwg_params']
+        
+        # --- Map Integer Enums to String Values for v4 ---
+        # Interpolation Method: {0: 'IDW', 1: 'BI', 2: 'AVG4P', 3: 'NP'}
+        interp_map = {0: 'IDW', 1: 'BI', 2: 'AVG4P', 3: 'NP'}
+        grid_interp = interp_map.get(params.get('interpolation_method_id'), 'IDW')
+
+        # Solar Correction: {0: 'None', 1: 'By_Month', 2: 'By_Day'}
+        solar_map = {0: 'None', 1: 'By_Month', 2: 'By_Day'}
+        solar_corr = solar_map.get(params.get('solar_hour_adjustment'), 'By_Month')
+
+        # Diffuse Method: {0: 'Ridley_Boland_Lauret_2010', 1: 'Engerer_2015', 2: 'Paulescu_Blaga_2019'}
+        diffuse_map = {0: 'Ridley_Boland_Lauret_2010', 1: 'Engerer_2015', 2: 'Paulescu_Blaga_2019'}
+        diffuse_method = diffuse_map.get(params.get('diffuse_irradiation_model'), 'Engerer_2015')
+
+        # Models List
+        models = params.get(self.model_arg_name, [])
+        models_str = ",".join(models) if isinstance(models, list) else str(models)
+
+        # UHI String: true:orig:target or false
+        add_uhi = str(params.get('add_uhi', True)).lower()
+        if add_uhi == 'true':
+            uhi_val = f"true:{params.get('epw_original_lcz', 14)}:{params.get('target_uhi_lcz', 1)}"
+        else:
+            uhi_val = "false"
+
+        # Construct the CLI arguments
+        command = [
+            'java', '-jar', self.inputs['fwg_jar_path'],
+            f'-epw={os.path.abspath(temp_epw_path)}',
+            f'-output_folder={os.path.abspath(temp_output_dir)}{os.sep}', # Ensure trailing slash if tool needs it
+            f'-models={models_str}',
+            f'-ensemble={str(params.get("create_ensemble", True)).lower()}',
+            f'-temp_shift_winter={params.get("winter_sd_shift", 0.0)}',
+            f'-temp_shift_summer={params.get("summer_sd_shift", 0.0)}',
+            f'-smooth_hours={params.get("month_transition_hours", 72)}',
+            f'-multithread={str(params.get("use_multithreading", True)).lower()}',
+            f'-grid_interpolation_method={grid_interp}',
+            f'-solar_correction={solar_corr}',
+            f'-diffuse_method={diffuse_method}',
+            f'-uhi={uhi_val}',
+            '-output_type=EPW'
+        ]
+        
+        return command
 
     def _process_generated_files(self, source_epw_path: str, temp_dir: str):
         """(Private) Moves and renames generated .epw and .stat files.
@@ -755,7 +903,10 @@ class MorphingWorkflowGlobal(_MorphingWorkflowBase):
                               fwg_diffuse_irradiation_model: int = 1,
                               fwg_add_uhi: bool = True,
                               fwg_epw_original_lcz: int = 14,
-                              fwg_target_uhi_lcz: int = 1):
+
+
+                              fwg_target_uhi_lcz: int = 1,
+                              fwg_version: Optional[Union[str, int]] = None):
         """STEP 2: Configures, validates, and previews the plan for the GLOBAL tool.
 
         This method combines configuration and preview into a single, robust step.
@@ -914,7 +1065,8 @@ class MorphingWorkflowEurope(_MorphingWorkflowBase):
                               fwg_diffuse_irradiation_model: int = 1,
                               fwg_add_uhi: bool = True,
                               fwg_epw_original_lcz: int = 14,
-                              fwg_target_uhi_lcz: int = 1):
+                              fwg_target_uhi_lcz: int = 1,
+                              fwg_version: Optional[Union[str, int]] = None):
         """STEP 2: Configures, validates, and previews the plan for the EUROPE tool.
 
         This method combines configuration and preview into a single, robust step.
@@ -989,5 +1141,6 @@ class MorphingWorkflowEurope(_MorphingWorkflowBase):
             fwg_diffuse_irradiation_model=fwg_diffuse_irradiation_model,
             fwg_add_uhi=fwg_add_uhi,
             fwg_epw_original_lcz=fwg_epw_original_lcz,
-            fwg_target_uhi_lcz=fwg_target_uhi_lcz
+            fwg_target_uhi_lcz=fwg_target_uhi_lcz,
+            fwg_version=fwg_version
         )

@@ -114,7 +114,8 @@ class MorphingIterator:
                            fwg_diffuse_irradiation_model: Optional[int] = None,
                            fwg_add_uhi: Optional[bool] = None,
                            fwg_epw_original_lcz: Optional[int] = None,
-                           fwg_target_uhi_lcz: Optional[int] = None):
+                           fwg_target_uhi_lcz: Optional[int] = None,
+                           fwg_version: Optional[Union[str, int]] = None):
         """Sets default parameter values for all runs in the batch.
 
         This method is a convenient way to define parameters that are common
@@ -151,7 +152,9 @@ class MorphingIterator:
             'fwg_use_multithreading': fwg_use_multithreading, 'fwg_interpolation_method_id': fwg_interpolation_method_id,
             'fwg_limit_variables': fwg_limit_variables, 'fwg_solar_hour_adjustment': fwg_solar_hour_adjustment,
             'fwg_diffuse_irradiation_model': fwg_diffuse_irradiation_model, 'fwg_add_uhi': fwg_add_uhi,
-            'fwg_epw_original_lcz': fwg_epw_original_lcz, 'fwg_target_uhi_lcz': fwg_target_uhi_lcz
+            'fwg_diffuse_irradiation_model': fwg_diffuse_irradiation_model, 'fwg_add_uhi': fwg_add_uhi,
+            'fwg_epw_original_lcz': fwg_epw_original_lcz, 'fwg_target_uhi_lcz': fwg_target_uhi_lcz,
+            'fwg_version': fwg_version
         }
 
         # Filter out any arguments that were not provided (are None).

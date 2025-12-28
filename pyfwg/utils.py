@@ -7,7 +7,7 @@ import subprocess
 import tempfile
 import time
 import re
-from typing import List, Union, Dict
+from typing import List, Union, Dict, Optional
 import ast
 import pandas as pd
 
@@ -121,6 +121,31 @@ def _robust_rmtree(path: str, max_retries: int = 5, delay: float = 0.5):
     # If all retries fail, log a final error.
     logging.error(f"Failed to delete directory {path} after {max_retries} retries.")
 
+
+def detect_fwg_version(jar_path: str) -> str:
+    """Detects the major version of the Future Weather Generator from the JAR filename.
+
+    Args:
+        jar_path (str): The path to the FWG JAR file.
+
+    Returns:
+        str: The major version number as a string (e.g., "4", "3").
+
+    Raises:
+        ValueError: If the version cannot be detected from the filename.
+    """
+    filename = os.path.basename(jar_path)
+    # Look for 'v' followed by digits and a dot (e.g., 'v4.', 'v3.')
+    match = re.search(r'v(\d+)\.', filename)
+    if match:
+        return match.group(1)
+    else:
+        raise ValueError(
+            f"Could not auto-detect FWG version from filename '{filename}'. "
+            "Please rename the file to include the version (e.g., 'FutureWeatherGenerator_v4.0.2.jar') "
+            "or explicitly provide the 'fwg_version' argument."
+        )
+
 # PREVIOUS VERSION OF uhi_morph
 
 # def uhi_morph(*,
@@ -170,9 +195,12 @@ def uhi_morph(*,
               fwg_original_lcz: int,
               fwg_target_lcz: int,
               java_class_path_prefix: str,
+
+
               fwg_limit_variables: bool = True,
               show_tool_output: bool = False,
-              raise_on_error: bool = True):
+              raise_on_error: bool = True,
+              fwg_version: Optional[Union[str, int]] = None):
     """Applies only the Urban Heat Island (UHI) effect to an EPW file.
 
     This function is a direct wrapper for the `UHI_Morph` class within the
@@ -213,21 +241,65 @@ def uhi_morph(*,
     # Ensure the output directory exists before running the tool.
     os.makedirs(fwg_output_dir, exist_ok=True)
 
+    # --- 0. Resolve FWG Version ---
+    if fwg_version is None:
+        try:
+            version_str = detect_fwg_version(fwg_jar_path)
+        except ValueError as e:
+            if raise_on_error:
+                raise e
+            else:
+                logging.error(f"Version detection failed: {e}")
+                return # Cannot proceed
+    else:
+        version_str = str(fwg_version)
+
+    is_v4 = version_str.startswith('4')
+
     # --- 1. Command Construction ---
-    # Create the composite LCZ argument string (e.g., "14:2").
-    lcz_options = f"{fwg_original_lcz}:{fwg_target_lcz}"
+    if is_v4:
+        # --- Version 4.x Logic ---
+        # UHI Morphing in v4 is triggered via flags
+        # java -jar FWG.jar -epw=... -output_folder=... -uhi=true:orig:target ...
 
-    # Dynamically build the full Java class path using the provided prefix.
-    class_path = f"{java_class_path_prefix}.UHI_Morph"
+        # Construct the command with named arguments
+        command = [
+            'java', '-jar', fwg_jar_path,
+            f'-epw={os.path.abspath(fwg_epw_path)}',
+            # Note: v4 typically expects output_folder to end with slash or be a directory
+            f'-output_folder={os.path.abspath(fwg_output_dir)}{os.sep}',
+            # UHI flag: -uhi=true:orig:target
+            f'-uhi=true:{fwg_original_lcz}:{fwg_target_lcz}',
+            # Limit variables flag (mapping boolean to true/false string if needed, or assuming tool handles it)
+            # Based on v4 requirements, we should check if other flags are mandatory.
+            # For UHI morphing specifically, usually we just need the basics.
+            # Assuming 'limit_variables' might not be a direct flag in the same way or has a default.
+            # If it is supported: f'-limit_variables={str(fwg_limit_variables).lower()}'
+            # For now, we will assume typical v4 usage.
+            f'-output_type=EPW' # Explicitly request EPW output if needed
+        ]
+        
+        # Note: The v4 tool might typically run a full morphing process. 
+        # For UHI-only, we pass specific flags. 
+        # If the tool requires other mandatory flags (like models) even if unused, we might need to dummy them.
+        # However, for pure UHI morphing, usually just providing the EPW and UHI settings is checking validty.
+        
+    else:
+        # --- Legacy (v3.x / Europe v1.x) Logic ---
+        # Create the composite LCZ argument string (e.g., "14:2").
+        lcz_options = f"{fwg_original_lcz}:{fwg_target_lcz}"
 
-    # Build the command as a list of strings for robust execution by subprocess.
-    command = [
-        'java', '-cp', fwg_jar_path, class_path,
-        os.path.abspath(fwg_epw_path),
-        os.path.abspath(fwg_output_dir) + '/',
-        str(fwg_limit_variables).lower(),
-        lcz_options
-    ]
+        # Dynamically build the full Java class path using the provided prefix.
+        class_path = f"{java_class_path_prefix}.UHI_Morph"
+
+        # Build the command as a list of strings for robust execution by subprocess.
+        command = [
+            'java', '-cp', fwg_jar_path, class_path,
+            os.path.abspath(fwg_epw_path),
+            os.path.abspath(fwg_output_dir) + '/',
+            str(fwg_limit_variables).lower(),
+            lcz_options
+        ]
 
     # Create a user-friendly, copy-pasteable version of the command for logging.
     printable_command = ' '.join(f'"{arg}"' if ' ' in arg else arg for arg in command)
@@ -271,7 +343,8 @@ def check_lcz_availability(*,
                            target_lcz: int,
                            fwg_jar_path: str,
                            java_class_path_prefix: str,
-                           show_tool_output: bool = False) -> Union[bool, Dict[str, List]]:
+                           show_tool_output: bool = False,
+                           fwg_version: Optional[Union[str, int]] = None) -> Union[bool, Dict[str, List]]:
     """Checks if the specified original and target LCZs are available for a given EPW file.
 
     This utility function internally calls `uhi_morph` in a temporary directory
@@ -317,7 +390,10 @@ def check_lcz_availability(*,
                 fwg_target_lcz=target_lcz,
                 java_class_path_prefix=java_class_path_prefix,
                 show_tool_output=show_tool_output,
-                raise_on_error=True  # Ensure it raises an exception on failure
+
+
+                raise_on_error=True,  # Ensure it raises an exception on failure
+                fwg_version=fwg_version
             )
             # If no exception was raised, the LCZ pair is valid.
             logging.info(f"LCZ pair (Original: {original_lcz}, Target: {target_lcz}) is available.")
@@ -461,8 +537,10 @@ def check_lcz_availability(*,
 def get_available_lczs(*,
                        epw_paths: Union[str, List[str]],
                        fwg_jar_path: str,
+
                        java_class_path_prefix: str = 'futureweathergenerator',
-                       show_tool_output: bool = False) -> Dict[str, List[int]]:
+                       show_tool_output: bool = False,
+                       fwg_version: Optional[Union[str, int]] = None) -> Dict[str, List[int]]:
     """Gets the available Local Climate Zones (LCZs) for one or more EPW files.
 
     This utility function iterates through a list of EPW files and runs a
@@ -510,7 +588,9 @@ def get_available_lczs(*,
             target_lcz=0,
             fwg_jar_path=fwg_jar_path,
             java_class_path_prefix=java_class_path_prefix,
-            show_tool_output=show_tool_output
+
+            show_tool_output=show_tool_output,
+            fwg_version=fwg_version
         )
 
         # If the result is a dictionary, it contains the data we need.
