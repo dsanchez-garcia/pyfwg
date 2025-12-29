@@ -269,6 +269,7 @@ def uhi_morph(*,
         # Construct the command with named arguments
         command = [
             'java', '-jar', fwg_jar_path,
+            '-u',  # <--- CRITICAL FIX: This flag tells the tool to run ONLY UHI mode (no climate models)
             f'-epw={os.path.abspath(fwg_epw_path)}',
             # Note: The tool typically expects output_folder to end with slash
             f'-output_folder={os.path.abspath(fwg_output_dir)}{os.sep}',
