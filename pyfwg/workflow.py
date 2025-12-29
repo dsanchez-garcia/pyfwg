@@ -271,15 +271,30 @@ class _MorphingWorkflowBase:
             logging.warning(f"Validation failed: 'fwg_target_uhi_lcz' must be between 1 and 17.")
             is_valid = False
 
-        # Validate integer set parameters.
-        validations = {
-            'interpolation_method_id': {0, 1, 2},
-            'solar_hour_adjustment': {0, 1, 2},
-            'diffuse_irradiation_model': {0, 1, 2}
-        }
+        # Validate enum parameters (Integer IDs or V4 Strings).
+        version = str(params.get('fwg_version', '3'))
+        is_v4 = version.startswith('4')
+
+        if is_v4:
+            validations = {
+                'interpolation_method_id': {0, 1, 2, 3, 'IDW', 'BI', 'AVG4P', 'NP'},
+                'solar_hour_adjustment': {0, 1, 2, 'None', 'By_Month', 'By_Day'},
+                'diffuse_irradiation_model': {0, 1, 2, 'Ridley_Boland_Lauret_2010', 'Engerer_2015', 'Paulescu_Blaga_2019'}
+            }
+        else:
+            validations = {
+                'interpolation_method_id': {0, 1, 2},
+                'solar_hour_adjustment': {0, 1, 2},
+                'diffuse_irradiation_model': {0, 1, 2}
+            }
+
         for param_name, valid_values in validations.items():
-            if params.get(param_name) not in valid_values:
-                logging.warning(f"Validation failed: '{param_name}' has value {params.get(param_name)}, but allowed values are {valid_values}.")
+            val = params.get(param_name)
+            # Basic integrity check: Allow if value matches one of the valid options
+            if val not in valid_values:
+                 # Additional check: If it's V4 and a string, maybe case-insensitive?
+                 # For now, strict match as defined in logic.
+                logging.warning(f"Validation failed: '{param_name}' has value {val}, but allowed values are {valid_values}.")
                 is_valid = False
 
         return is_valid
@@ -301,15 +316,16 @@ class _MorphingWorkflowBase:
                                     fwg_summer_sd_shift: float,
                                     fwg_month_transition_hours: int,
                                     fwg_use_multithreading: bool,
-                                    fwg_interpolation_method_id: int,
+                                    fwg_interpolation_method_id: Union[int, str],
                                     fwg_limit_variables: bool,
-                                    fwg_solar_hour_adjustment: int,
-                                    fwg_diffuse_irradiation_model: int,
+                                    fwg_solar_hour_adjustment: Union[int, str],
+                                    fwg_diffuse_irradiation_model: Union[int, str],
                                     fwg_add_uhi: bool,
                                     fwg_epw_original_lcz: int,
 
 
                                     fwg_target_uhi_lcz: int,
+                                    fwg_output_type: str = 'EPW',
                                     fwg_version: Optional[Union[str, int]] = None):
         """(Private) Base method for configuring, validating, and previewing the plan.
 
@@ -354,8 +370,8 @@ class _MorphingWorkflowBase:
             'diffuse_irradiation_model': fwg_diffuse_irradiation_model,
             'add_uhi': fwg_add_uhi,
             'epw_original_lcz': fwg_epw_original_lcz,
-            'epw_original_lcz': fwg_epw_original_lcz,
             'target_uhi_lcz': fwg_target_uhi_lcz,
+            'output_type': fwg_output_type,
             'fwg_version': fwg_version
         }
         # Apply the overrides. Any value explicitly passed will replace the one from fwg_params.
@@ -736,17 +752,32 @@ class _MorphingWorkflowBase:
         params = self.inputs['fwg_params']
         
         # --- Map Integer Enums to String Values for v4 ---
+        # The user can now provide either the legacy integer ID or the V4 string directly.
+
         # Interpolation Method: {0: 'IDW', 1: 'BI', 2: 'AVG4P', 3: 'NP'}
+        interp_val = params.get('interpolation_method_id')
         interp_map = {0: 'IDW', 1: 'BI', 2: 'AVG4P', 3: 'NP'}
-        grid_interp = interp_map.get(params.get('interpolation_method_id'), 'IDW')
+        if isinstance(interp_val, int):
+            grid_interp = interp_map.get(interp_val, 'IDW')
+        else:
+             # Assume it's a valid string if not an int (e.g., 'IDW')
+            grid_interp = str(interp_val) if interp_val is not None else 'IDW'
 
         # Solar Correction: {0: 'None', 1: 'By_Month', 2: 'By_Day'}
+        solar_val = params.get('solar_hour_adjustment')
         solar_map = {0: 'None', 1: 'By_Month', 2: 'By_Day'}
-        solar_corr = solar_map.get(params.get('solar_hour_adjustment'), 'By_Month')
+        if isinstance(solar_val, int):
+            solar_corr = solar_map.get(solar_val, 'By_Month')
+        else:
+            solar_corr = str(solar_val) if solar_val is not None else 'By_Month'
 
         # Diffuse Method: {0: 'Ridley_Boland_Lauret_2010', 1: 'Engerer_2015', 2: 'Paulescu_Blaga_2019'}
+        diffuse_val = params.get('diffuse_irradiation_model')
         diffuse_map = {0: 'Ridley_Boland_Lauret_2010', 1: 'Engerer_2015', 2: 'Paulescu_Blaga_2019'}
-        diffuse_method = diffuse_map.get(params.get('diffuse_irradiation_model'), 'Engerer_2015')
+        if isinstance(diffuse_val, int):
+            diffuse_method = diffuse_map.get(diffuse_val, 'Engerer_2015')
+        else:
+            diffuse_method = str(diffuse_val) if diffuse_val is not None else 'Engerer_2015'
 
         # Models List
         models = params.get(self.model_arg_name, [])
@@ -774,20 +805,19 @@ class _MorphingWorkflowBase:
             f'-solar_correction={solar_corr}',
             f'-diffuse_method={diffuse_method}',
             f'-uhi={uhi_val}',
-            '-output_type=EPW'
+            f'-output_type={params.get("output_type", "EPW")}'
         ]
         
         return command
 
     def _process_generated_files(self, source_epw_path: str, temp_dir: str):
-        """(Private) Moves and renames generated .epw and .stat files.
+        """(Private) Moves and renames generated files (.epw, .stat, .met, .csv).
 
         This helper method iterates through all files in a temporary directory
-        after a successful morphing run. It specifically looks for `.epw` and
-        `.stat` files and matches them against the `rename_plan`.
+        after a successful morphing run. It specifically looks for supported output
+        extensions and matches them against the `rename_plan`.
 
-        Auxiliary files (`.csv`, `.log`, etc.) and the original source EPW
-        are ignored and left in the temporary directory for later cleanup.
+        Auxiliary files (.log, etc.) and the original source EPW are ignored.
 
         Args:
             source_epw_path (str): The path to the original source EPW file,
@@ -797,22 +827,28 @@ class _MorphingWorkflowBase:
         logging.info(f"Processing generated files in: {temp_dir}")
 
         plan_for_this_epw = self.rename_plan.get(source_epw_path, {})
+        allowed_extensions = {".epw", ".stat", ".met", ".csv"}
 
         for generated_file in os.listdir(temp_dir):
             if generated_file == os.path.basename(source_epw_path):
                 continue
 
-            if not (generated_file.endswith(".epw") or generated_file.endswith(".stat")):
+            _, ext = os.path.splitext(generated_file)
+            if ext.lower() not in allowed_extensions:
                 logging.info(f"Skipping auxiliary file: '{generated_file}'")
                 continue
 
             destination_path = None
             for expected_key, final_epw_path in plan_for_this_epw.items():
+                # Check if the generated filename (without extension) matches the expected key
+                # expected_key is usually "Model_Scenario_Year"
                 if os.path.splitext(expected_key)[0] in generated_file:
-                    if generated_file.endswith(".epw"):
-                        destination_path = final_epw_path
-                    elif generated_file.endswith(".stat"):
-                        destination_path = os.path.splitext(final_epw_path)[0] + ".stat"
+                    # Construct destination path:
+                    # Take the planned final EPW path (which ends in .epw), strip extension,
+                    # and append the ACTUAL extension of the generated file.
+                    # This handles .epw, .stat, .met, .csv dynamically.
+                    base_dest_path = os.path.splitext(final_epw_path)[0]
+                    destination_path = base_dest_path + ext
                     break
 
             if destination_path:
@@ -897,15 +933,14 @@ class MorphingWorkflowGlobal(_MorphingWorkflowBase):
                               fwg_summer_sd_shift: float = 0.0,
                               fwg_month_transition_hours: int = 72,
                               fwg_use_multithreading: bool = True,
-                              fwg_interpolation_method_id: int = 0,
+                              fwg_interpolation_method_id: Union[int, str] = 0,
                               fwg_limit_variables: bool = True,
-                              fwg_solar_hour_adjustment: int = 1,
-                              fwg_diffuse_irradiation_model: int = 1,
+                              fwg_solar_hour_adjustment: Union[int, str] = 1,
+                              fwg_diffuse_irradiation_model: Union[int, str] = 1,
                               fwg_add_uhi: bool = True,
                               fwg_epw_original_lcz: int = 14,
-
-
                               fwg_target_uhi_lcz: int = 1,
+                              fwg_output_type: str = 'EPW',
                               fwg_version: Optional[Union[str, int]] = None):
         """STEP 2: Configures, validates, and previews the plan for the GLOBAL tool.
 
@@ -949,6 +984,7 @@ class MorphingWorkflowGlobal(_MorphingWorkflowBase):
             fwg_add_uhi (bool, optional): Add UHI effect.
             fwg_epw_original_lcz (int, optional): Original EPW LCZ.
             fwg_target_uhi_lcz (int, optional): Target UHI LCZ.
+            fwg_output_type (str, optional): Output format (e.g., 'EPW', 'SPAIN_MET'). Defaults to 'EPW'.
         """
         # This method acts as a user-friendly, type-hinted interface.
         # It collects all the specific arguments and passes them down to the
@@ -981,7 +1017,8 @@ class MorphingWorkflowGlobal(_MorphingWorkflowBase):
             fwg_diffuse_irradiation_model=fwg_diffuse_irradiation_model,
             fwg_add_uhi=fwg_add_uhi,
             fwg_epw_original_lcz=fwg_epw_original_lcz,
-            fwg_target_uhi_lcz=fwg_target_uhi_lcz
+            fwg_target_uhi_lcz=fwg_target_uhi_lcz,
+            fwg_output_type=fwg_output_type
         )
 
 class MorphingWorkflowEurope(_MorphingWorkflowBase):
@@ -1059,13 +1096,14 @@ class MorphingWorkflowEurope(_MorphingWorkflowBase):
                               fwg_summer_sd_shift: float = 0.0,
                               fwg_month_transition_hours: int = 72,
                               fwg_use_multithreading: bool = True,
-                              fwg_interpolation_method_id: int = 0,
+                              fwg_interpolation_method_id: Union[int, str] = 0,
                               fwg_limit_variables: bool = True,
-                              fwg_solar_hour_adjustment: int = 1,
-                              fwg_diffuse_irradiation_model: int = 1,
+                              fwg_solar_hour_adjustment: Union[int, str] = 1,
+                              fwg_diffuse_irradiation_model: Union[int, str] = 1,
                               fwg_add_uhi: bool = True,
                               fwg_epw_original_lcz: int = 14,
                               fwg_target_uhi_lcz: int = 1,
+                              fwg_output_type: str = 'EPW',
                               fwg_version: Optional[Union[str, int]] = None):
         """STEP 2: Configures, validates, and previews the plan for the EUROPE tool.
 
@@ -1109,6 +1147,7 @@ class MorphingWorkflowEurope(_MorphingWorkflowBase):
             fwg_add_uhi (bool, optional): Add UHI effect.
             fwg_epw_original_lcz (int, optional): Original EPW LCZ.
             fwg_target_uhi_lcz (int, optional): Target UHI LCZ.
+            fwg_output_type (str, optional): Output format (e.g., 'EPW', 'SPAIN_MET'). Defaults to 'EPW'.
         """
         # This method acts as a user-friendly, type-hinted interface for the Europe tool.
         # It collects all the specific arguments and passes them down to the
@@ -1142,5 +1181,6 @@ class MorphingWorkflowEurope(_MorphingWorkflowBase):
             fwg_add_uhi=fwg_add_uhi,
             fwg_epw_original_lcz=fwg_epw_original_lcz,
             fwg_target_uhi_lcz=fwg_target_uhi_lcz,
+            fwg_output_type=fwg_output_type,
             fwg_version=fwg_version
         )

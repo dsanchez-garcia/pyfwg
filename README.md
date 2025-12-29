@@ -18,14 +18,14 @@ A robust, step-by-step Python workflow manager for the [Future Weather Generator
 - **Excel Integration**: Export templates and load run configurations directly from Excel files for easy parametric analysis.
 - **Clear and Organized Output**: Automatically renames and organizes the final `.epw` and `.stat` files into a clean directory structure.
 
-## What's New in Version 0.2.1?
+## What's New in Version 0.3.0?
 
-Version 0.2.1 builds upon the major 0.2.0 update, introducing powerful new capabilities for parametric analysis, expanded tool support, and improved validation. For a full list of changes, see the [CHANGELOG](https://github.com/dsanchez-garcia/pyfwg/blob/main/CHANGELOG.md) file.
+Version 0.3.0 introduces full support for the **Future Weather Generator v4.x**, while maintaining complete backward compatibility with v3.x and Europe v1.x.
 
-- **Parametric Analysis with `MorphingIterator`**: The biggest new feature is the `MorphingIterator` class, designed to automate large batches of simulations. Define all your runs in a Pandas DataFrame or an Excel file and execute them with a single command. The iterator now includes robust **overwrite prevention**, which intelligently validates your run configuration and provides a comprehensive report of all potential filename collisions before execution, making it much easier to debug complex setups.
--   **Support for the Europe-Specific Tool**: `pyfwg` now fully supports the European version of the FWG tool with the `MorphingWorkflowEurope` class and `morph_epw_europe` function.
--   **Pre-flight Validation**: Workflows now automatically validate Local Climate Zone (LCZ) availability before running a simulation, preventing common errors. New utility functions like `get_available_lczs` have also been added to help you explore your EPW files.
--   **Important API Change**: The original `morph_epw` function has been renamed to `morph_epw_global` to distinguish it from the new Europe-specific function. Similarly, the `MorphingWorkflow` class is now `MorphingWorkflowGlobal`.
+-   **Support for FWG v4.x**: Seamlessly work with the latest version of the tool, which uses a new dynamic key-value argument system.
+-   **Automatic Version Detection**: `pyfwg` automatically detects the tool version from your JAR filename (e.g., `FutureWeatherGenerator_v4.0.2.jar`). No extra configuration needed!
+-   **Manual Override**: A new `fwg_version` parameter allows you to explicitly specify the version (e.g., `'4'` or `'3'`) if your filename doesn't follow standard naming conventions.
+-   **Backward Compatibility**: Legacy workflows (v3.0.0, v3.0.1, Europe v1.0.1) continue to work exactly as before without any changes to your code.
 
 ## Requirements
 
@@ -34,7 +34,7 @@ Before using `pyfwg`, you need to have the following installed and configured:
 *   **Python 3.9+**
 *   **Java**: The `java` command must be accessible from your system's terminal (i.e., it must be in your system's PATH).
 *   **Future Weather Generator**: You must download the appropriate `.jar` file from the [official website](https://future-weather-generator.adai.pt/).
-    *   The **Global Tool** (`FutureWeatherGenerator_vX.X.X.jar`) has been tested with versions **v3.0.0** and **v3.0.1**.
+    *   The **Global Tool** (`FutureWeatherGenerator_vX.X.X.jar`) has been tested with versions **v3.0.0**, **v3.0.1**, and **v4.0.2**.
     *   The **Europe Tool** (`FutureWeatherGenerator_Europe_vX.X.X.jar`) has been tested with version **v1.0.1**.
 ## Installation
 
@@ -67,6 +67,23 @@ created_files = morph_epw_global(
 print("Successfully created files:")
 for f in created_files:
     print(f)
+```
+
+### Using FWG v4.x
+
+If you are using version 4, usage is identical! `pyfwg` handles the different command-line syntax (key-value arguments) for you automatically.
+
+```python
+# Just point to your v4 JAR
+jar_path_v4 = r"D:\path\to\your\FutureWeatherGenerator_v4.0.2.jar"
+
+morph_epw_global(
+    epw_paths='epws/weather.epw',
+    fwg_jar_path=jar_path_v4,
+    # Optional: explicitly set version if detection fails
+    # fwg_version='4', 
+    fwg_target_uhi_lcz=3
+)
 ```
 
 ## Advanced Usage: The MorphingWorkflow Class

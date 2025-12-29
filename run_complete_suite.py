@@ -113,7 +113,7 @@ def test_workflows():
         # Method: configure_and_preview
         wf.configure_and_preview(
             final_output_dir=os.path.join(OUTPUT_DIR, "v3_global"),
-            output_filename_pattern='v3_{city}_{year}',
+            output_filename_pattern='v3_{city}_{ssp}_{year}',
             scenario_mapping={'ssp245': 'SSP2-4.5'},
             fwg_jar_path=JAR_V3,
             fwg_gcms=['BCC_CSM2_MR'],
@@ -126,7 +126,7 @@ def test_workflows():
         if wf.is_config_valid:
             print("  PASS: configure_and_preview (Config valid)")
             # Skipped actual execution to save time. Using V4 for full verification.
-            # wf.execute_morphing() 
+            wf.execute_morphing()
         else:
             print("  FAIL: configure_and_preview (Config invalid)")
 
@@ -140,14 +140,20 @@ def test_workflows():
         wf.map_categories([EPW_FILE], keyword_mapping=mapping)
         wf.configure_and_preview(
             final_output_dir=os.path.join(OUTPUT_DIR, "v4_global"),
-            output_filename_pattern='v4_{city}_{year}',
+            output_filename_pattern='v4_{city}_{ssp}_{year}',
             scenario_mapping={'ssp245': 'SSP2-4.5'},
             fwg_jar_path=JAR_V4,
             fwg_gcms=['BCC_CSM2_MR'],
             fwg_epw_original_lcz=2,
             fwg_target_uhi_lcz=3,
+            # Testing New Feature: Using direct string parameters for V4
+            fwg_interpolation_method_id='IDW', 
+            fwg_solar_hour_adjustment='By_Month',
+            fwg_diffuse_irradiation_model='Engerer_2015',
+            # Verify explicit output type support (matches default but proves arg is accepted)
+            fwg_output_type='EPW', 
             run_incomplete_files=True,
-            fwg_version=4 
+            fwg_version='4' 
         )
         if wf.is_config_valid:
              print("  PASS: configure_and_preview V4 (Config valid)")
@@ -170,7 +176,7 @@ def test_workflows():
         wf.map_categories([EPW_FILE], keyword_mapping=mapping)
         wf.configure_and_preview(
             final_output_dir=os.path.join(OUTPUT_DIR, "europe"),
-            output_filename_pattern='eur_{city}_{year}',
+            output_filename_pattern='eur_{city}_{rcp}_{year}',
             scenario_mapping={'rcp26': 'RCP-2.6'},
             fwg_jar_path=JAR_EUR,
             fwg_rcm_pairs=['ICHEC_EC_EARTH_SMHI_RCA4'],
@@ -263,7 +269,7 @@ def test_iterator():
         
         iterator.set_default_values(
              final_output_dir=os.path.join(OUTPUT_DIR, "iterator"),
-             output_filename_pattern='iter_{city}_{year}',
+             output_filename_pattern='iter_{city}_{ssp}_{year}',
              scenario_mapping={'ssp245': 'SSP2-4.5'},
              fwg_jar_path=JAR_V4,
              fwg_gcms=['BCC_CSM2_MR'],

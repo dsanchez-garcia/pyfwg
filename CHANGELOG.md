@@ -10,6 +10,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Your next great feature!
 
+## [0.3.0] - 2025-12-29
+
+### Added
+- **Support for Future Weather Generator v4.x**: `pyfwg` now fully supports the new version of the global tool, which uses a different command-line interface (dynamic key-value arguments instead of positional ones).
+- **Auto-Detection of Tool Version**: Added `detect_fwg_version` utility. The library now automatically detects whether the provided JAR file is v3 or v4 based on the filename (e.g., `FutureWeatherGenerator_v4.0.2.jar`).
+- **Manual Version Override**: Added a new `fwg_version` parameter to `morph_epw_global`, `morph_epw_europe`, and all `MorphingWorkflow` classes. This allows users to manually specify the version (e.g., `fwg_version='4'`) if auto-detection fails or non-standard filenames are used.
+- **Dynamic Command Construction**: Implemented internal logic (`_build_command_v4`) to construct the correct Java commands for v4, including handling of the new key-value parameter format (e.g., `-uhi=true:14:1`).
+
+### Changed
+- **Workflow Parameter Mapping**: Updated `MorphingWorkflowGlobal` to map integer IDs (like Interpolation Method or Solar Model) to their corresponding string values required by FWG v4 (e.g., `0` -> `'IDW'`).
+- **Flexible Parameter Inputs**: `pyfwg` now accepts **both** legacy integer IDs (automapped to V4 strings) AND direct string values (e.g., `'IDW'`, `'By_Day'`, `'AVG4P'`) for V4 parameters in `morph_epw_global`, `morph_epw_europe` and all workflow classes.
+- **Iterator Enhancement**: Updated `MorphingIterator` to accept and pass the new `fwg_version` parameter to all generated workflows.
+- **Validation Logic**: Updated internal validation to support both v3 and v4 model names and parameters.
+
 ## [0.2.1] - 2025-09-29
 
 ### Changed
@@ -48,7 +62,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Initial bug fixes and improvements to the first public release.
 
-[Unreleased]: https://github.com/dsanchez-garcia/pyfwg/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/dsanchez-garcia/pyfwg/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/dsanchez-garcia/pyfwg/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/dsanchez-garcia/pyfwg/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/dsanchez-garcia/pyfwg/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/dsanchez-garcia/pyfwg/releases/tag/v0.1.1

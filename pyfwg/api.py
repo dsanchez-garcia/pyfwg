@@ -192,13 +192,14 @@ def morph_epw_global(*,
                      fwg_summer_sd_shift: float = 0.0,
                      fwg_month_transition_hours: int = 72,
                      fwg_use_multithreading: bool = True,
-                     fwg_interpolation_method_id: int = 0,
+                     fwg_interpolation_method_id: Union[int, str] = 0,
                      fwg_limit_variables: bool = True,
-                     fwg_solar_hour_adjustment: int = 1,
-                     fwg_diffuse_irradiation_model: int = 1,
+                     fwg_solar_hour_adjustment: Union[int, str] = 1,
+                     fwg_diffuse_irradiation_model: Union[int, str] = 1,
                      fwg_add_uhi: bool = True,
                      fwg_epw_original_lcz: int = 14,
                      fwg_target_uhi_lcz: int = 1,
+                     fwg_output_type: str = 'EPW',
                      fwg_version: Optional[Union[str, int]] = None):
     """Performs a direct, one-shot morphing using the GLOBAL Future Weather Generator tool.
 
@@ -283,6 +284,7 @@ def morph_epw_global(*,
         fwg_add_uhi=fwg_add_uhi,
         fwg_epw_original_lcz=fwg_epw_original_lcz,
         fwg_target_uhi_lcz=fwg_target_uhi_lcz,
+        fwg_output_type=fwg_output_type,
         fwg_version=fwg_version
     )
 
@@ -513,13 +515,14 @@ def morph_epw_europe(*,
                      fwg_summer_sd_shift: float = 0.0,
                      fwg_month_transition_hours: int = 72,
                      fwg_use_multithreading: bool = True,
-                     fwg_interpolation_method_id: int = 0,
+                     fwg_interpolation_method_id: Union[int, str] = 0,
                      fwg_limit_variables: bool = True,
-                     fwg_solar_hour_adjustment: int = 1,
-                     fwg_diffuse_irradiation_model: int = 1,
+                     fwg_solar_hour_adjustment: Union[int, str] = 1,
+                     fwg_diffuse_irradiation_model: Union[int, str] = 1,
                      fwg_add_uhi: bool = True,
                      fwg_epw_original_lcz: int = 14,
                      fwg_target_uhi_lcz: int = 1,
+                     fwg_output_type: str = 'EPW',
                      fwg_version: Optional[Union[str, int]] = None):
     """Performs a direct, one-shot morphing using the EUROPE-specific Future Weather Generator tool.
 
@@ -605,6 +608,7 @@ def morph_epw_europe(*,
         fwg_add_uhi=fwg_add_uhi,
         fwg_epw_original_lcz=fwg_epw_original_lcz,
         fwg_target_uhi_lcz=fwg_target_uhi_lcz,
+        fwg_output_type=fwg_output_type,
         fwg_version=fwg_version
     )
 
