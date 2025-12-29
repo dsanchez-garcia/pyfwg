@@ -1,3 +1,15 @@
+"""
+Internal Components Coverage Test.
+
+This script tests specific internal components of the library, focusing on:
+1. `get_available_lczs` utility with different JAR versions.
+2. `MorphingIterator` configuration, specifically verifying that it correctly passes 
+   new V4 arguments to the underlying workflows.
+3. Persistence of configuration state within the iterator.
+
+How to run:
+    python tests/test_components_coverage.py
+"""
 
 import os
 import logging

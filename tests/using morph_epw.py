@@ -1,3 +1,12 @@
+"""
+High-level API Functional Tests for Global and Europe.
+
+This script demonstrates and tests the usage of the simplified API functions:
+- `morph_epw_global`: For global future weather generation.
+- `morph_epw_europe`: For European-specific future weather generation using regional models.
+
+It verifies parameter validation and file creation for single EPW files.
+"""
 from pyfwg import morph_epw_global
 
 jar_path = r"D:\OneDrive - Universidad de Cádiz (uca.es)\Programas\FutureWeatherGenerator_v3.0.1.jar"

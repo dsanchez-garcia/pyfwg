@@ -1,3 +1,16 @@
+"""
+Backward Compatibility and V4 Feature Test.
+
+This script verifies that the library maintains backward compatibility with:
+- FutureWeatherGenerator V3.0.x (Legacy Global)
+- FutureWeatherGenerator_Europe V1.0.x (Legacy Europe)
+
+It also tests the correct integration and command-line argument generation for:
+- FutureWeatherGenerator V4.0.x (New Global)
+
+How to run:
+    python tests/test_backward_compat_and_v4.py
+"""
 
 import os
 import shutil

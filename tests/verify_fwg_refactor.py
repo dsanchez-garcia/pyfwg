@@ -1,3 +1,15 @@
+"""
+Refactor Verification Tool.
+
+This script acts as a final check after major code refactoring. 
+It ensures that:
+1. Version detection logic correctly distinguishes between V3 and V4 JARs.
+2. High-level API functions remain compatible and functional with both versions.
+3. The directory structure and internal imports are correctly configured.
+
+How to run:
+    python tests/verify_fwg_refactor.py
+"""
 import os
 import shutil
 import logging

@@ -2,6 +2,15 @@
 
 
 
+"""
+Work-in-Progress (WIP) Workflow Integration Test.
+
+This script tests the direct usage of `MorphingWorkflowGlobal` and 
+`MorphingWorkflowEurope` classes. It covers:
+1. Category mapping across multiple EPW files.
+2. Configuration of output filename patterns.
+3. Execution of both global and European workflows in sequence.
+"""
 
 import pyfwg as pyfwg
 from os import listdir

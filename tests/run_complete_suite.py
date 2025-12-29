@@ -1,3 +1,15 @@
+"""
+Complete Test Suite for pyfwg.
+
+This script executes a comprehensive set of tests covering:
+1. Utility functions (version detection, tutorial copying, LCZ availability).
+2. Workflow classes (MorphingWorkflowGlobal and MorphingWorkflowEurope) for both legacy (V3) and new (V4) JAR versions.
+3. High-level API functions (morph_epw_global).
+4. MorphingIterator class, including Excel template generation and workflow preparation.
+
+How to run: 
+    python tests/run_complete_suite.py
+"""
 
 import os
 import shutil
@@ -21,7 +33,8 @@ from pyfwg.utils import (
 # Configuration
 JAR_V3 = r"D:\OneDrive - Universidad de Cádiz (uca.es)\Programas\FutureWeatherGenerator_v3.0.1.jar"
 JAR_V4 = r"D:\OneDrive - Universidad de Cádiz (uca.es)\Programas\FutureWeatherGenerator_v4.0.2.jar"
-JAR_EUR = r"D:\OneDrive - Universidad de Cádiz (uca.es)\Programas\FutureWeatherGenerator_Europe_v1.0.1.jar"
+JAR_EUR_V1 = r"D:\OneDrive - Universidad de Cádiz (uca.es)\Programas\FutureWeatherGenerator_Europe_v1.0.1.jar"
+JAR_EUR_V2 = r"D:\OneDrive - Universidad de Cádiz (uca.es)\Programas\FutureWeatherGenerator_Europe_v2.0.2.jar"
 EPW_FILE = r"epws/wo_pattern/GBR_London.Gatwick.037760_IWEC_uhi_type-2.epw"
 OUTPUT_DIR = r"D:\temp_pyfwg_complete_suite"
 
@@ -65,6 +78,12 @@ def test_utilities():
         
         ver = detect_fwg_version(JAR_V4)
         print(f"  V4 Detection: {'PASS' if ver == '4' else 'FAIL'} (Got {ver})")
+        
+        ver = detect_fwg_version(JAR_EUR_V1)
+        print(f"  Eur V1 Detection: {'PASS' if ver == '1' else 'FAIL'} (Got {ver})")
+
+        ver = detect_fwg_version(JAR_EUR_V2)
+        print(f"  Eur V2 Detection: {'PASS' if ver == '2' else 'FAIL'} (Got {ver})")
         
         # Test failure case
         try:
@@ -161,33 +180,63 @@ def test_workflows():
              wf.execute_morphing()
              print("  PASS: execute_morphing V4 executed.")
              
-             print("  Testing preview_renaming V4...")
-             wf.preview_renaming()
-             print("  PASS: preview_renaming V4 executed.")
+             print("  Testing rename_plan V4...")
+             if wf.rename_plan:
+                 print("  PASS: rename_plan V4 is populated.")
+             else:
+                 print("  FAIL: rename_plan V4 is empty.")
         else:
              print("  FAIL: configure_and_preview V4 (Config invalid)")
     except Exception as e:
          print(f"  FAIL: {e}")
 
-    # 2.3 MorphingWorkflowEurope (Legacy)
-    print("[2.3] Testing MorphingWorkflowEurope...")
+    # 2.3 MorphingWorkflowEurope (V2)
+    print("[2.3] Testing MorphingWorkflowEurope (V2)...")
     try:
         wf = MorphingWorkflowEurope()
         wf.map_categories([EPW_FILE], keyword_mapping=mapping)
         wf.configure_and_preview(
-            final_output_dir=os.path.join(OUTPUT_DIR, "europe"),
-            output_filename_pattern='eur_{city}_{rcp}_{year}',
+            final_output_dir=os.path.join(OUTPUT_DIR, "europe_v2"),
+            output_filename_pattern='eur_v2_{city}_{rcp}_{year}',
             scenario_mapping={'rcp26': 'RCP-2.6'},
-            fwg_jar_path=JAR_EUR,
+            fwg_jar_path=JAR_EUR_V2,
             fwg_rcm_pairs=['ICHEC_EC_EARTH_SMHI_RCA4'],
             fwg_epw_original_lcz=2,
             fwg_target_uhi_lcz=3,
-            run_incomplete_files=True
+            # Testing V2 features (same as V4 global)
+            fwg_interpolation_method_id='BI',
+            fwg_solar_hour_adjustment='By_Day',
+            run_incomplete_files=True,
+            fwg_version='2'
         )
         if wf.is_config_valid:
-             print("  PASS: configure_and_preview Europe (Config valid)")
+             print("  PASS: configure_and_preview Europe V2 (Config valid)")
+             # wf.execute_morphing() # Uncomment if you want full execution
         else:
-             print("  FAIL: configure_and_preview Europe (Config invalid)")
+             print("  FAIL: configure_and_preview Europe V2 (Config invalid)")
+    except Exception as e:
+         print(f"  FAIL: {e}")
+
+    # 2.4 MorphingWorkflowEurope (V1 Legacy)
+    print("[2.4] Testing MorphingWorkflowEurope (V1 Legacy)...")
+    try:
+        wf = MorphingWorkflowEurope()
+        wf.map_categories([EPW_FILE], keyword_mapping=mapping)
+        wf.configure_and_preview(
+            final_output_dir=os.path.join(OUTPUT_DIR, "europe_v1"),
+            output_filename_pattern='eur_v1_{city}_{rcp}_{year}',
+            scenario_mapping={'rcp26': 'RCP-2.6'},
+            fwg_jar_path=JAR_EUR_V1,
+            fwg_rcm_pairs=['ICHEC_EC_EARTH_SMHI_RCA4'],
+            fwg_epw_original_lcz=2,
+            fwg_target_uhi_lcz=3,
+            run_incomplete_files=True,
+            fwg_version='1'
+        )
+        if wf.is_config_valid:
+             print("  PASS: configure_and_preview Europe V1 (Config valid)")
+        else:
+             print("  FAIL: configure_and_preview Europe V1 (Config invalid)")
     except Exception as e:
          print(f"  FAIL: {e}")
 

@@ -1,3 +1,12 @@
+"""
+Iterative Morphing and Warning Handling Test.
+
+This script tests the `MorphingIterator` class, specifically focusing on:
+1. Batch processing of multiple EPW files.
+2. Definition and application of global default parameters vs. run-specific parameters.
+3. Automatic discovery of available LCZs for multiple locations.
+4. Handling of overwrite warnings and iterative execution.
+"""
 from pyfwg import MorphingWorkflowGlobal, export_template_to_excel, load_runs_from_excel, get_available_lczs, MorphingIterator
 import os, pandas as pd
 

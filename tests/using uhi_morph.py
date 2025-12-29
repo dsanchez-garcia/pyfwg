@@ -1,3 +1,12 @@
+"""
+Urban Heat Island (UHI) Morphing Utility Tests.
+
+This script tests various ways to apply UHI morphing to EPW files:
+1. Direct usage of `uhi_morph` utility.
+2. Checking LCZ availability in a JAR file.
+3. Listing all available LCZs using `get_available_lczs`.
+4. Full morphing runs (Global and Europe) with UHI LCZ transitions.
+"""
 # import pyfwg as pyfwg
 #
 #

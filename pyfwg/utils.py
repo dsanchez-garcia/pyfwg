@@ -255,34 +255,31 @@ def uhi_morph(*,
         version_str = str(fwg_version)
 
     is_v4 = version_str.startswith('4')
+    is_europe = 'europe' in java_class_path_prefix.lower()
+    
+    # Use new CLI style (Key-Value) for Global v4+ or Europe v2+
+    use_new_cli = is_v4 or (is_europe and version_str.startswith('2'))
 
     # --- 1. Command Construction ---
-    if is_v4:
-        # --- Version 4.x Logic ---
-        # UHI Morphing in v4 is triggered via flags
+    if use_new_cli:
+        # --- New CLI Style (Global v4 / Europe v2) Logic ---
+        # UHI Morphing is triggered via flags
         # java -jar FWG.jar -epw=... -output_folder=... -uhi=true:orig:target ...
 
         # Construct the command with named arguments
         command = [
             'java', '-jar', fwg_jar_path,
             f'-epw={os.path.abspath(fwg_epw_path)}',
-            # Note: v4 typically expects output_folder to end with slash or be a directory
+            # Note: The tool typically expects output_folder to end with slash
             f'-output_folder={os.path.abspath(fwg_output_dir)}{os.sep}',
             # UHI flag: -uhi=true:orig:target
             f'-uhi=true:{fwg_original_lcz}:{fwg_target_lcz}',
-            # Limit variables flag (mapping boolean to true/false string if needed, or assuming tool handles it)
-            # Based on v4 requirements, we should check if other flags are mandatory.
-            # For UHI morphing specifically, usually we just need the basics.
-            # Assuming 'limit_variables' might not be a direct flag in the same way or has a default.
-            # If it is supported: f'-limit_variables={str(fwg_limit_variables).lower()}'
-            # For now, we will assume typical v4 usage.
-            f'-output_type=EPW' # Explicitly request EPW output if needed
+            # Explicitly request EPW output if needed
+            f'-output_type=EPW'
         ]
         
-        # Note: The v4 tool might typically run a full morphing process. 
-        # For UHI-only, we pass specific flags. 
-        # If the tool requires other mandatory flags (like models) even if unused, we might need to dummy them.
-        # However, for pure UHI morphing, usually just providing the EPW and UHI settings is checking validty.
+        # Note: The tool might typically run a full morphing process. 
+        # For UHI-only, we pass specific flags.
         
     else:
         # --- Legacy (v3.x / Europe v1.x) Logic ---

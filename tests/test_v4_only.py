@@ -1,3 +1,15 @@
+"""
+Specific Test for FWG V4 Features.
+
+This script focuses exclusively on testing the FutureWeatherGenerator V4.0.x integration.
+It verifies:
+1. Mapping of EPW files using keywords.
+2. Configuration of V4-specific parameters (e.g., interpolation methods, solar hour adjustments).
+3. The actual construction and execution of the V4-style command-line interface.
+
+How to run:
+    python tests/test_v4_only.py
+"""
 
 import os
 import shutil
