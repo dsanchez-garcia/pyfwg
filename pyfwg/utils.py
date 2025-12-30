@@ -541,8 +541,7 @@ def check_lcz_availability(*,
 def get_available_lczs(*,
                        epw_paths: Union[str, List[str]],
                        fwg_jar_path: str,
-
-                       java_class_path_prefix: str = 'futureweathergenerator',
+                       java_class_path_prefix: Optional[str] = None,
                        show_tool_output: bool = False,
                        fwg_version: Optional[Union[str, int]] = None) -> Dict[str, List[int]]:
     """Gets the available Local Climate Zones (LCZs) for one or more EPW files.
@@ -560,16 +559,26 @@ def get_available_lczs(*,
             to the EPW files to be checked.
         fwg_jar_path (str): Path to the `FutureWeatherGenerator.jar` file.
         java_class_path_prefix (str, optional): The Java package prefix for the
-            tool. Defaults to 'futureweathergenerator' for the global tool.
-            Use 'futureweathergenerator_europe' for the Europe-specific tool.
+            tool. If None (default), it will be auto-detected from the JAR
+            filename (contains 'europe' -> 'futureweathergenerator_europe',
+            else 'futureweathergenerator').
         show_tool_output (bool, optional): If True, prints the underlying
             FWG tool's console output in real-time. Defaults to False.
+        fwg_version (Optional[Union[str, int]], optional): Explicitly provide 
+            the FWG version. If None, it will be auto-detected.
 
     Returns:
         Dict[str, List[int]]: A dictionary where keys are the EPW filenames
         and values are sorted lists of the available LCZ numbers (as integers).
         If a file cannot be processed, its value will be an empty list.
     """
+    # --- Auto-detect Class Path Prefix ---
+    if java_class_path_prefix is None:
+        if 'europe' in os.path.basename(fwg_jar_path).lower():
+            java_class_path_prefix = 'futureweathergenerator_europe'
+        else:
+            java_class_path_prefix = 'futureweathergenerator'
+
     # Determine the number of files for the initial log message.
     num_files = len(epw_paths) if isinstance(epw_paths, list) else 1
     logging.info(f"--- Fetching available LCZs for {num_files} EPW file(s) ---")

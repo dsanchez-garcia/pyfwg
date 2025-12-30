@@ -289,13 +289,15 @@ class _MorphingWorkflowBase:
                 'diffuse_irradiation_model': {0, 1, 2}
             }
 
-        for param_name, valid_values in validations.items():
-            val = params.get(param_name)
-            # Basic integrity check: Allow if value matches one of the valid options
-            if val not in valid_values:
-                 # Additional check: If it's V4 and a string, maybe case-insensitive?
-                 # For now, strict match as defined in logic.
-                logging.warning(f"Validation failed: '{param_name}' has value {val}, but allowed values are {valid_values}.")
+        # Validate output type.
+        if params.get('output_type'):
+            valid_output_types = {'EPW', 'SPAIN_MET', 'PORTUGAL_CSV'}
+            if params['output_type'] not in valid_output_types:
+                logging.warning(f"Validation failed: 'fwg_output_type' has value '{params['output_type']}', but allowed values are {valid_output_types}.")
+                if params['output_type'].upper() == 'MET':
+                    logging.warning("Suggestion: Did you mean 'SPAIN_MET'?")
+                elif params['output_type'].upper() == 'CSV':
+                    logging.warning("Suggestion: Did you mean 'PORTUGAL_CSV'?")
                 is_valid = False
 
         return is_valid
@@ -661,7 +663,13 @@ class _MorphingWorkflowBase:
 
         # Build a separate, "printable" version for logging.
         display_command_list = command[:]
-        display_command_list[4] = os.path.abspath(epw_path)
+        if use_new_cli:
+            # For the new CLI, the EPW path is within the -epw= argument at index 3
+            display_command_list[3] = f'-epw={os.path.abspath(epw_path)}'
+        else:
+            # For the legacy CLI, the EPW path is at index 4
+            display_command_list[4] = os.path.abspath(epw_path)
+            
         printable_command = ' '.join(f'"{arg}"' if ' ' in arg else arg for arg in display_command_list)
 
         print("\n" + "-" * 20, f"Executing FWG for {os.path.basename(epw_path)}", "-" * 20)
@@ -794,7 +802,11 @@ class _MorphingWorkflowBase:
 
             _, ext = os.path.splitext(generated_file)
             if ext.lower() not in allowed_extensions:
-                logging.info(f"Skipping auxiliary file: '{generated_file}'")
+                # Special mention for Analysis Files/Folders in V4 Global and V2 Europe
+                if generated_file.startswith(('00_', '01_', '02_', '03_', '04_')):
+                    logging.info(f"Analysis file/folder detected: '{generated_file}'. It will remain in the temporary directory.")
+                else:
+                    logging.info(f"Skipping auxiliary file: '{generated_file}'")
                 continue
 
             destination_path = None
