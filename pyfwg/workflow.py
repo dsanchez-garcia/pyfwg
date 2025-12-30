@@ -8,7 +8,7 @@ import logging
 from typing import List, Optional, Dict, Any, Union
 
 # Import the functions from the utils.py file
-from .utils import check_lcz_availability, _robust_rmtree, detect_fwg_version
+from .utils import check_lcz_availability, _robust_rmtree, detect_fwg_version, sanitize_epw_minutes
 
 # Import constants from the local constants.py file
 from .constants import (
@@ -635,6 +635,12 @@ class _MorphingWorkflowBase:
             temp_epw_path = os.path.join(temp_output_dir, os.path.basename(epw_path))
             shutil.copy2(epw_path, temp_epw_path)
             logging.info(f"Copied input file to temporary directory: {temp_epw_path}")
+            
+            # --- Sanitization Step ---
+            # Some date-time libraries (like java.time in FWG) fail when encountering minute 60.
+            # We sanitize the temporary copy of the EPW file to use minute 0 instead.
+            sanitize_epw_minutes(temp_epw_path)
+            # -------------------------
         except Exception as e:
             logging.error(f"Failed to copy EPW to temporary directory: {e}")
             return False

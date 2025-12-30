@@ -90,7 +90,8 @@ from .utils import (
     get_available_lczs,
     export_template_to_excel,
     load_runs_from_excel,
-    detect_fwg_version
+    detect_fwg_version,
+    sanitize_epw_minutes
 )
 
 # Expose important constants so users can easily access lists of valid models and scenarios.

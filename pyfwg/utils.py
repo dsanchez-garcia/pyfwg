@@ -10,6 +10,7 @@ import re
 from typing import List, Union, Dict, Optional
 import ast
 import pandas as pd
+from datetime import datetime
 
 # Import the modern way to access package data (Python 3.9+)
 try:
@@ -378,10 +379,15 @@ def check_lcz_availability(*,
     # preventing leftover files from the check.
     with tempfile.TemporaryDirectory() as temp_dir:
         try:
+            # Copy and sanitize the EPW file in the temp directory to avoid Java MinuteOfHour: 60 errors
+            temp_epw_path = os.path.join(temp_dir, os.path.basename(epw_path))
+            shutil.copy2(epw_path, temp_epw_path)
+            sanitize_epw_minutes(temp_epw_path)
+
             # Call uhi_morph. It is expected to raise a CalledProcessError if
             # the LCZs are invalid, which we will catch and handle.
             uhi_morph(
-                fwg_epw_path=epw_path,
+                fwg_epw_path=temp_epw_path,
                 fwg_jar_path=fwg_jar_path,
                 fwg_output_dir=temp_dir,
                 fwg_original_lcz=original_lcz,
@@ -669,5 +675,48 @@ def load_runs_from_excel(file_path: str) -> pd.DataFrame:
                 lambda x: ast.literal_eval(x) if isinstance(x, str) and x.startswith(('[', '{')) else x
             )
 
+
     logging.info("Runs loaded and data types converted successfully.")
     return df
+
+
+def sanitize_epw_minutes(epw_path: str):
+    """
+    Sanitizes an EPW file by replacing minute '60' with '0' in data records.
+    This prevents issues with strict date-time libraries (like java.time) 
+    that expect MinuteOfHour to be between 0 and 59.
+
+    Args:
+        epw_path (str): The path to the EPW file to sanitize.
+    """
+    temp_file = epw_path + ".tmp"
+    try:
+        modified = False
+        with open(epw_path, 'r', encoding='utf-8', errors='ignore') as f_in, \
+             open(temp_file, 'w', encoding='utf-8', newline='') as f_out:
+            for line in f_in:
+                # EPW data lines typically start with a year (e.g., 19xx, 20xx)
+                # and have many columns.
+                if len(line) > 10 and line[0:1].isdigit():
+                    parts = line.split(',')
+                    if len(parts) >= 5:
+                        # 5th column (index 4) is the minute
+                        if parts[4].strip() == '60':
+                            parts[4] = ' 0' if parts[4].startswith(' ') else '0'
+                            line = ','.join(parts)
+                            modified = True
+                f_out.write(line)
+        
+        if modified:
+            shutil.move(temp_file, epw_path)
+            logging.debug(f"Sanitized minute 60 in: {os.path.basename(epw_path)}")
+        else:
+            os.remove(temp_file)
+            
+    except Exception as e:
+        logging.warning(f"Failed to sanitize EPW minutes for {epw_path}: {e}")
+        if os.path.exists(temp_file):
+            try:
+                os.remove(temp_file)
+            except:
+                pass
