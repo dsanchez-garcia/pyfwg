@@ -263,12 +263,12 @@ class MorphingIterator:
 
         # Iterate through all available default parameters.
         for col, default_val in final_defaults.items():
-            # Case 1: The column does not exist in the user's DataFrame.
             if col not in completed_df.columns:
-                # If a default value exists, create the column and fill all
-                # rows with this default.
                 if default_val is not None:
-                    completed_df[col] = default_val
+                    # We wrap the default value in a list of the same length as the DataFrame
+                    # to ensure that list or dictionary defaults are assigned to each row
+                    # correctly without causing length mismatch errors.
+                    completed_df[col] = [default_val] * len(completed_df)
             # Case 2: The column exists, but may have missing values.
             else:
                 # Only proceed if there is a default value to fill with.

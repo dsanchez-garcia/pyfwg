@@ -99,11 +99,11 @@ def test_utilities():
     print("[1.3] Testing get_available_lczs with V4 JAR...")
     try:
         print("  Skipping get_available_lczs full execution to save time (verified in previous steps).")
-        # lczs = get_available_lczs([EPW_FILE], fwg_jar_path=JAR_V4, fwg_version=4)
-        # if EPW_FILE in lczs and len(lczs[EPW_FILE]) > 0:
-        #     print(f"  PASS: Found LCZs {lczs[EPW_FILE]}")
-        # else:
-        #     print("  FAIL: No LCZs found or empty list.")
+        lczs = get_available_lczs([EPW_FILE], fwg_jar_path=JAR_V4, fwg_version=4)
+        if EPW_FILE in lczs and len(lczs[EPW_FILE]) > 0:
+            print(f"  PASS: Found LCZs {lczs[EPW_FILE]}")
+        else:
+            print("  FAIL: No LCZs found or empty list.")
     except Exception as e:
         print(f"  FAIL: {e}")
 

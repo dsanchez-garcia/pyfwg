@@ -91,7 +91,8 @@ from .utils import (
     export_template_to_excel,
     load_runs_from_excel,
     detect_fwg_version,
-    sanitize_epw_minutes
+    sanitize_epw_minutes,
+    get_fwg_parameters_info
 )
 
 # Expose important constants so users can easily access lists of valid models and scenarios.

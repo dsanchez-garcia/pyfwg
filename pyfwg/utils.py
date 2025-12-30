@@ -1,16 +1,24 @@
 # pyfwg/utils.py
 
 import os
+import sys
 import shutil
 import logging
 import subprocess
 import tempfile
 import time
 import re
-from typing import List, Union, Dict, Optional
+from typing import List, Union, Dict, Optional, Any
 import ast
 import pandas as pd
 from datetime import datetime
+
+# Import constants from the local constants.py file
+from .constants import (
+    DEFAULT_GLOBAL_GCMS, GLOBAL_SCENARIOS,
+    DEFAULT_EUROPE_RCMS, EUROPE_SCENARIOS,
+    ALL_POSSIBLE_YEARS
+)
 
 # Import the modern way to access package data (Python 3.9+)
 try:
@@ -195,9 +203,7 @@ def uhi_morph(*,
               fwg_output_dir: str,
               fwg_original_lcz: int,
               fwg_target_lcz: int,
-              java_class_path_prefix: str,
-
-
+              java_class_path_prefix: Optional[str] = None,
               fwg_limit_variables: bool = True,
               show_tool_output: bool = False,
               raise_on_error: bool = True,
@@ -221,8 +227,9 @@ def uhi_morph(*,
         fwg_output_dir (str): Directory where the final UHI-morphed file will be saved.
         fwg_original_lcz (int): The LCZ of the original EPW file.
         fwg_target_lcz (int): The target LCZ for which to calculate the UHI effect.
-        java_class_path_prefix (str): The Java package prefix for the tool
-            (e.g., 'futureweathergenerator' or 'futureweathergenerator_europe').
+        java_class_path_prefix (str, optional): The Java package prefix for the tool
+            (e.g., 'futureweathergenerator' or 'futureweathergenerator_europe'). 
+            If None, it will be auto-detected from the JAR filename.
         fwg_limit_variables (bool, optional): If True, bounds variables to their
             physical limits. Defaults to True.
         show_tool_output (bool, optional): If True, prints the tool's console
@@ -231,6 +238,8 @@ def uhi_morph(*,
             exception if the external tool fails. If False, it will log the
             error but not stop the program, allowing the calling function to
             handle the failure. Defaults to True.
+        fwg_version (Optional[Union[str, int]], optional): Explicitly provide 
+            the FWG version. If None, it will be auto-detected.
 
     Raises:
         FileNotFoundError: If the 'java' command is not found and `raise_on_error` is True.
@@ -254,6 +263,13 @@ def uhi_morph(*,
                 return # Cannot proceed
     else:
         version_str = str(fwg_version)
+
+    # --- 1. Auto-detect Class Path Prefix ---
+    if java_class_path_prefix is None:
+        if 'europe' in os.path.basename(fwg_jar_path).lower():
+            java_class_path_prefix = 'futureweathergenerator_europe'
+        else:
+            java_class_path_prefix = 'futureweathergenerator'
 
     is_v4 = version_str.startswith('4')
     is_europe = 'europe' in java_class_path_prefix.lower()
@@ -341,7 +357,7 @@ def check_lcz_availability(*,
                            original_lcz: int,
                            target_lcz: int,
                            fwg_jar_path: str,
-                           java_class_path_prefix: str,
+                           java_class_path_prefix: Optional[str] = None,
                            show_tool_output: bool = False,
                            fwg_version: Optional[Union[str, int]] = None) -> Union[bool, Dict[str, List]]:
     """Checks if the specified original and target LCZs are available for a given EPW file.
@@ -360,10 +376,13 @@ def check_lcz_availability(*,
         original_lcz (int): The original LCZ number you want to validate.
         target_lcz (int): The target LCZ number you want to validate.
         fwg_jar_path (str): Path to the `FutureWeatherGenerator.jar` file.
-        java_class_path_prefix (str): The Java package prefix for the tool.
+        java_class_path_prefix (str, optional): The Java package prefix for the 
+            tool. If None, it will be auto-detected from the JAR filename.
         show_tool_output (bool, optional): If True, prints the underlying
             FWG tool's console output in real-time. This is useful for
             debugging the check itself. Defaults to False.
+        fwg_version (Optional[Union[str, int]], optional): Explicitly provide 
+            the FWG version. If None, it will be auto-detected.
 
     Returns:
         Union[bool, Dict[str, List]]:
@@ -386,6 +405,8 @@ def check_lcz_availability(*,
 
             # Call uhi_morph. It is expected to raise a CalledProcessError if
             # the LCZs are invalid, which we will catch and handle.
+            # CRITICAL: We MUST set show_tool_output=False here so that
+            # subprocess captures the output in the exception object.
             uhi_morph(
                 fwg_epw_path=temp_epw_path,
                 fwg_jar_path=fwg_jar_path,
@@ -393,10 +414,8 @@ def check_lcz_availability(*,
                 fwg_original_lcz=original_lcz,
                 fwg_target_lcz=target_lcz,
                 java_class_path_prefix=java_class_path_prefix,
-                show_tool_output=show_tool_output,
-
-
-                raise_on_error=True,  # Ensure it raises an exception on failure
+                show_tool_output=False,  # Always capture internally
+                raise_on_error=True,
                 fwg_version=fwg_version
             )
             # If no exception was raised, the LCZ pair is valid.
@@ -404,11 +423,14 @@ def check_lcz_availability(*,
             return True
 
         except subprocess.CalledProcessError as e:
-            # This block is the expected outcome if an LCZ is invalid.
-            # It now has exclusive control over handling the error.
+            # If the user wanted to see the output, print it now since we captured it.
+            if show_tool_output:
+                if e.stdout: print(e.stdout.strip())
+                if e.stderr: print(e.stderr.strip(), file=sys.stderr)
 
             # Combine stdout and stderr to ensure we capture the full error message.
-            output = e.stdout + e.stderr
+            # Use 'or ""' to avoid TypeError if they are None for some reason.
+            output = (e.stdout or "") + (e.stderr or "")
             available_lczs_full_text = []
             available_lcz_numbers = set()
             start_parsing = False
@@ -418,16 +440,21 @@ def check_lcz_availability(*,
                 # The line "The LCZs available are:" is our trigger to start parsing.
                 if 'The LCZs available are:' in line:
                     start_parsing = True
+                    # Use only the part after the trigger to avoid matching the requested (invalid) LCZ
+                    parts = line.split('The LCZs available are:')
+                    relevant_text = parts[1] if len(parts) > 1 else ""
+                elif start_parsing:
+                    relevant_text = line
+                else:
                     continue
 
-                # Once triggered, look for lines containing LCZ information.
-                if start_parsing:
-                    # Use regex to safely extract the LCZ number from the line.
-                    match = re.search(r'LCZ (\d+)', line)
-                    if match:
-                        # Store the number for logical checks and the full text for display.
-                        available_lcz_numbers.add(int(match.group(1)))
-                        available_lczs_full_text.append(line.strip())
+                # Look for lines containing LCZ information.
+                # Use regex to safely extract the LCZ number from the text.
+                match = re.search(r'LCZ (\d+)', relevant_text)
+                if match:
+                    # Store the number for logical checks and the full text for display.
+                    available_lcz_numbers.add(int(match.group(1)))
+                    available_lczs_full_text.append(relevant_text.strip())
 
             # If we successfully parsed the list of available LCZs, diagnose the problem.
             if available_lczs_full_text:
@@ -729,3 +756,124 @@ def sanitize_epw_minutes(epw_path: str):
                 os.remove(temp_file)
             except:
                 pass
+
+
+def get_fwg_parameters_info() -> Dict[str, Dict[str, Any]]:
+    """Returns a comprehensive dictionary of all FWG parameters, their descriptions, defaults, and allowed values.
+
+    This function is intended to help users understand the available options for
+    both the Global and Europe-specific Future Weather Generator tools within `pyfwg`.
+    """
+    return {
+        'fwg_gcms': {
+            'description': 'List of Global Climate Models (GCMs) to use for the Global tool.',
+            'allowed_values': sorted(list(DEFAULT_GLOBAL_GCMS)),
+            'default': 'All available GCMs',
+            'applies_to': 'Global'
+        },
+        'fwg_rcm_pairs': {
+            'description': 'List of GCM-RCM model pairs to use for the Europe-specific tool.',
+            'allowed_values': sorted(list(DEFAULT_EUROPE_RCMS)),
+            'default': 'All available RCM pairs',
+            'applies_to': 'Europe'
+        },
+        'fwg_create_ensemble': {
+            'description': 'Whether to create an ensemble (average) of all selected models.',
+            'allowed_values': [True, False],
+            'default': True
+        },
+        'fwg_winter_sd_shift': {
+            'description': 'Standard deviation shift for winter temperatures.',
+            'range': [-2.0, 2.0],
+            'default': 0.0
+        },
+        'fwg_summer_sd_shift': {
+            'description': 'Standard deviation shift for summer temperatures.',
+            'range': [-2.0, 2.0],
+            'default': 0.0
+        },
+        'fwg_month_transition_hours': {
+            'description': 'Number of hours used for smooth transitions between months.',
+            'range': [0, 336],
+            'default': 72
+        },
+        'fwg_interpolation_method_id': {
+            'description': 'Method used for spatial interpolation of climate data.',
+            'allowed_values': {
+                0: 'IDW (Inverse Distance Weighting)',
+                1: 'BI (Bilinear)',
+                2: 'AVG4P (Average of 4 nearest points)',
+                3: 'NP (Nearest Point - Global v4 / Europe v2 only)'
+            },
+            'default': 0
+        },
+        'fwg_solar_hour_adjustment': {
+            'description': 'Correction method for solar hour based on location.',
+            'allowed_values': {
+                0: 'None',
+                1: 'By_Month',
+                2: 'By_Day'
+            },
+            'default': 1
+        },
+        'fwg_diffuse_irradiation_model': {
+            'description': 'The mathematical model used to calculate diffuse horizontal irradiation.',
+            'allowed_values': {
+                0: 'Ridley_Boland_Lauret_2010',
+                1: 'Engerer_2015',
+                2: 'Paulescu_Blaga_2019'
+            },
+            'default': 1
+        },
+        'fwg_output_type': {
+            'description': 'The format of the generated weather files.',
+            'allowed_values': ['EPW', 'SPAIN_MET', 'PORTUGAL_CSV'],
+            'default': 'EPW'
+        },
+        'fwg_add_uhi': {
+            'description': 'Whether to apply the Urban Heat Island (UHI) effect using LCZs.',
+            'allowed_values': [True, False],
+            'default': True
+        },
+        'fwg_epw_original_lcz': {
+            'description': 'The Local Climate Zone (LCZ) corresponding to the original EPW file location.',
+            'range': [1, 17],
+            'default': 14,
+            'note': 'Commonly 14 for rural/airport locations.'
+        },
+        'fwg_target_uhi_lcz': {
+            'description': 'The target Local Climate Zone (LCZ) to which the EPW should be morphed.',
+            'range': [1, 17],
+            'default': 1
+        },
+        'fwg_use_multithreading': {
+            'description': 'Whether to use multiple CPU cores to speed up calculations.',
+            'allowed_values': [True, False],
+            'default': True
+        },
+        'fwg_limit_variables': {
+            'description': 'Whether to force weather variables to stay within physical limits.',
+            'allowed_values': [True, False],
+            'default': True
+        },
+        'fwg_version': {
+            'description': 'The version of the Future Weather Generator tool to use.',
+            'allowed_values': ['3', '4', '1', '2'],
+            'default': 'Auto-detected from JAR filename',
+            'note': 'Use 3/4 for Global, 1/2 for Europe.'
+        },
+        'global_scenarios': {
+            'description': 'The Shared Socioeconomic Pathways (SSP) scenarios available for the Global tool.',
+            'allowed_values': GLOBAL_SCENARIOS,
+            'applies_to': 'Global'
+        },
+        'europe_scenarios': {
+            'description': 'The Representative Concentration Pathway (RCP) scenarios available for the Europe tool.',
+            'allowed_values': EUROPE_SCENARIOS,
+            'applies_to': 'Europe'
+        },
+        'years': {
+            'description': 'The future years for which climate data can be generated.',
+            'allowed_values': ALL_POSSIBLE_YEARS
+        }
+    }
