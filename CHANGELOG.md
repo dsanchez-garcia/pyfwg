@@ -7,12 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-- Your next great feature!
 
 ## [0.3.0] - 2025-12-29
 
 ### Added
+- **New Utility: `get_fwg_parameters_info`**: Added a helper function to retrieve all available FWG parameters, their descriptions, defaults, and allowed values. This is especially useful for guiding users when using the new string-based parameter inputs in V4.
+- **Improved Notebooks**: Updated all tutorial notebooks to include examples of how to use `get_fwg_parameters_info` to explore and validate parameter values.
+- **Enhanced `MorphingWorkflowEurope`**: Added support for the `PORTUGAL_CSV` output type in Europe v2, allowing for generation of Portuguese-specific meteorological files.
 - **Support for Future Weather Generator v4.x**: `pyfwg` now fully supports the new version of the global tool, which uses a different command-line interface (dynamic key-value arguments instead of positional ones).
 - **Auto-Detection of Tool Version**: Added `detect_fwg_version` utility. The library now automatically detects whether the provided JAR file is v3 or v4 based on the filename (e.g., `FutureWeatherGenerator_v4.0.2.jar`).
 - **Manual Version Override**: Added a new `fwg_version` parameter to `morph_epw_global`, `morph_epw_europe`, and all `MorphingWorkflow` classes. This allows users to manually specify the version (e.g., `fwg_version='4'`) if auto-detection fails or non-standard filenames are used.
@@ -23,6 +24,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Flexible Parameter Inputs**: `pyfwg` now accepts **both** legacy integer IDs (automapped to V4 strings) AND direct string values (e.g., `'IDW'`, `'By_Day'`, `'AVG4P'`) for V4 parameters in `morph_epw_global`, `morph_epw_europe` and all workflow classes.
 - **Iterator Enhancement**: Updated `MorphingIterator` to accept and pass the new `fwg_version` parameter to all generated workflows.
 - **Validation Logic**: Updated internal validation to support both v3 and v4 model names and parameters.
+
+### Fixed
+- **LCZ Availability Check**: Improved error handling in `get_available_lczs` to gracefully handle cases where the Java tool might fail or return unexpected output.
+- **Workflow Cleanup**: Fixed a minor bug in temporary file cleanup to ensure all analysis folders are handled correctly.
 
 ## [0.2.1] - 2025-09-29
 
