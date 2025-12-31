@@ -3,6 +3,8 @@ REM build_docs.bat
 REM This script automates the generation of the pyfwg documentation.
 REM It should be executed from the project root.
 
+SET "PYTHONPATH=%CD%;%PYTHONPATH%"
+
 ECHO --- [Step 1 of 3] Cleaning previous builds...
 REM Delete the contents of the output folder to ensure a clean build.
 REM The /Q flag executes the deletion without asking for confirmation.

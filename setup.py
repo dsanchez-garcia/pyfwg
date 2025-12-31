@@ -69,8 +69,20 @@ setup(
     ],
 
     # --- Package Finding and Data ---
-    packages=find_packages(exclude=["wip", "wip.*", "tests", "tests.*", "tutorials", "tutorials.*"]),
-    include_package_data=True,
+    # Explicitly list only the main package to avoid setuptools warnings
+    # about tutorial subdirectories being detected as packages.
+    packages=['pyfwg'],
+    
+    # Use explicit package_data instead of include_package_data to have more control
+    # and avoid setuptools scanning all subdirectories.
+    package_data={
+        'pyfwg': [
+            'tutorials/*.ipynb',
+            'tutorials/*.xlsx',
+            'tutorials/epws/w_pattern/*.epw',
+            'tutorials/epws/wo_pattern/*.epw',
+        ],
+    },
 
     # --- Dependencies and Requirements ---
     python_requires=">=3.9",

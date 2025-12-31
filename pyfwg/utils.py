@@ -800,10 +800,10 @@ def get_fwg_parameters_info() -> Dict[str, Dict[str, Any]]:
         'fwg_interpolation_method_id': {
             'description': 'Method used for spatial interpolation of climate data.',
             'allowed_values': {
-                0: 'IDW (Inverse Distance Weighting)',
-                1: 'BI (Bilinear)',
-                2: 'AVG4P (Average of 4 nearest points)',
-                3: 'NP (Nearest Point - Global v4 / Europe v2 only)'
+                0: 'IDW',
+                1: 'BI',
+                2: 'AVG4P',
+                3: 'NP'
             },
             'default': 0
         },
@@ -862,18 +862,4 @@ def get_fwg_parameters_info() -> Dict[str, Dict[str, Any]]:
             'default': 'Auto-detected from JAR filename',
             'note': 'Use 3/4 for Global, 1/2 for Europe.'
         },
-        'global_scenarios': {
-            'description': 'The Shared Socioeconomic Pathways (SSP) scenarios available for the Global tool.',
-            'allowed_values': GLOBAL_SCENARIOS,
-            'applies_to': 'Global'
-        },
-        'europe_scenarios': {
-            'description': 'The Representative Concentration Pathway (RCP) scenarios available for the Europe tool.',
-            'allowed_values': EUROPE_SCENARIOS,
-            'applies_to': 'Europe'
-        },
-        'years': {
-            'description': 'The future years for which climate data can be generated.',
-            'allowed_values': ALL_POSSIBLE_YEARS
-        }
     }
