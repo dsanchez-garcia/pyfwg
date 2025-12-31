@@ -14,6 +14,16 @@ This documentation provides detailed information on the library's three main int
 *   **Advanced Workflow Classes** (``MorphingWorkflowGlobal``, ``MorphingWorkflowEurope``): For complex projects requiring custom file renaming based on filename parsing, and full, step-by-step control over the validation and execution process.
 *   **Parametric Iterator** (``MorphingIterator``): The most powerful feature, designed for automating large batches of morphing workflows defined in a Pandas DataFrame or an Excel file, making parametric analysis simple and structured.
 
+What's New in Version 0.3.0?
+----------------------------
+
+Version 0.3.0 introduces full support for the **Future Weather Generator v4.x** (Global) and **v2.x** (Europe), while maintaining complete backward compatibility with legacy versions.
+
+*   **Support for FWG v4.x & Europe v2.x**: Seamlessly work with the latest versions of the tool, which use a new dynamic key-value argument system.
+*   **Automatic Version Detection**: `pyfwg` automatically detects the tool version from your JAR filename (e.g., ``FutureWeatherGenerator_v4.0.2.jar``).
+*   **New Utility Functions**: Includes helpers like ``get_fwg_parameters_info`` to guide you through available model arguments, and ``check_lcz_availability`` to prevent errors before execution.
+*   **Enhanced Compatibility**: Improved handling of Spanish (``SPAIN_MET``) and Portuguese (``PORTUGAL_CSV``) output formats.
+
 Requirements
 ------------
 
@@ -22,8 +32,8 @@ Before using `pyfwg`, you need to have the following installed and configured:
 * **Python 3.9+**
 * **Java**: The ``java`` command must be accessible from your system's terminal (i.e., it must be in your system's PATH).
 * **Future Weather Generator**: You must download the appropriate ``.jar`` file from the `official website <https://future-weather-generator.adai.pt/>`_.
-    * The **Global Tool** (`FutureWeatherGenerator_vX.X.X.jar`) has been tested with versions **v3.0.0** and **v3.0.1**.
-    * The **Europe Tool** (`FutureWeatherGenerator_Europe_vX.X.X.jar`) has been tested with version **v1.0.1**.
+    * The **Global Tool** (``FutureWeatherGenerator_vX.X.X.jar``) has been tested with versions **v3.0.0**, **v3.0.1**, and **v4.0.2**.
+    * The **Europe Tool** (``FutureWeatherGenerator_Europe_vX.X.X.jar``) has been tested with versions **v1.0.1** and **v2.0.2**.
 
 Acknowledgements
 ----------------
