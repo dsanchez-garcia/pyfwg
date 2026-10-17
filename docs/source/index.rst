@@ -10,19 +10,20 @@ Welcome to pyfwg's documentation! (Version |release|)
 
 This documentation provides detailed information on the library's three main interfaces, designed to cater to different levels of complexity:
 
-*   **High-Level Functions** (``morph_epw_global``, ``morph_epw_europe``): For simple, one-shot morphing tasks where you need direct control over the tool's parameters without complex file renaming.
-*   **Advanced Workflow Classes** (``MorphingWorkflowGlobal``, ``MorphingWorkflowEurope``): For complex projects requiring custom file renaming based on filename parsing, and full, step-by-step control over the validation and execution process.
+*   **High-Level Functions** (``morph_epw_global``, ``morph_epw_europe``, ``morph_epw_cordex``): For simple, one-shot morphing tasks where you need direct control over the tool's parameters without complex file renaming.
+*   **Advanced Workflow Classes** (``MorphingWorkflowGlobal``, ``MorphingWorkflowEurope``, ``MorphingWorkflowCordex``): For complex projects requiring custom file renaming based on filename parsing, and full, step-by-step control over the validation and execution process.
 *   **Parametric Iterator** (``MorphingIterator``): The most powerful feature, designed for automating large batches of morphing workflows defined in a Pandas DataFrame or an Excel file, making parametric analysis simple and structured.
 
-What's New in Version 0.3.0?
+What's New in Version 0.4.0?
 ----------------------------
 
-Version 0.3.0 introduces full support for the **Future Weather Generator v4.x** (Global) and **v2.x** (Europe), while maintaining complete backward compatibility with legacy versions.
+Version 0.4.0 adds support for the **FWG Engine**, the shared engine of the latest Future Weather Generator distributions: **Global v5.x**, **Europe v3.x** and the new **CORDEX regional** distributions. Earlier versions keep working exactly as before.
 
-*   **Support for FWG v4.x & Europe v2.x**: Seamlessly work with the latest versions of the tool, which use a new dynamic key-value argument system.
-*   **Automatic Version Detection**: `pyfwg` automatically detects the tool version from your JAR filename (e.g., ``FutureWeatherGenerator_v4.0.2.jar``).
-*   **New Utility Functions**: Includes helpers like ``get_fwg_parameters_info`` to guide you through available model arguments, and ``check_lcz_availability`` to prevent errors before execution.
-*   **Enhanced Compatibility**: Improved handling of Spanish (``SPAIN_MET``) and Portuguese (``PORTUGAL_CSV``) output formats.
+*   **Global v5.x and Europe v3.x**: Use them with the same classes and functions as before. `pyfwg` detects the version from the JAR and builds the new command line for you.
+*   **CORDEX Regional Distributions**: The new ``MorphingWorkflowCordex`` class and ``morph_epw_cordex`` function support the Middle East and North Africa, Africa, North America, Central America, South America, West & South Asia, Southeast Asia and Australasia distributions (see ``CORDEX_REGIONS``).
+*   **New FWG Engine Options**: Select scenarios and future periods (``fwg_scenarios``, ``fwg_timeframes``), solar decomposition, illuminance and infrared models, uncertainty cases (``fwg_uncertainty_variant``), output profile and a shared climate-data cache (``fwg_model_unzipped_folder``). Any other option of the tool can be passed with ``fwg_extra_args``.
+*   **JAR Inspection**: ``get_fwg_distribution_info`` reads the scenarios, periods and climate models packaged in FWG Engine JARs, which `pyfwg` also uses to validate your configuration.
+*   **Urban Heat Island**: The FWG Engine no longer supports the UHI effect. By default, `pyfwg` applies it only with the versions that support it (Global v3/v4 and Europe v1/v2).
 
 Requirements
 ------------
@@ -34,6 +35,7 @@ Before using `pyfwg`, you need to have the following installed and configured:
 * **Future Weather Generator**: You must download the appropriate ``.jar`` file from the `official website <https://future-weather-generator.adai.pt/>`_.
     * The **Global Tool** (``FutureWeatherGenerator_vX.X.X.jar``) has been tested with versions **v3.0.0**, **v3.0.1**, and **v4.0.2**.
     * The **Europe Tool** (``FutureWeatherGenerator_Europe_vX.X.X.jar``) has been tested with versions **v1.0.1** and **v2.0.2**.
+    * The **FWG Engine distributions** (``FutureWeatherGenerator-CMIP6-Global-v5.X.X.jar``, ``FutureWeatherGenerator-CORDEX-CMIP5-Europe-EUR-11-v3.X.X.jar`` and the CORDEX regional ``FutureWeatherGenerator-CORDEX-CMIP5-<Region>-<Domain>-v1.X.X.jar``) are supported according to the command-line interface of FWG Engine v1.0 and v1.1.
 
 Acknowledgements
 ----------------

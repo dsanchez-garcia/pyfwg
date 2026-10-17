@@ -2,12 +2,16 @@
 
 import os
 import sys
+import copy
+import json
 import shutil
 import logging
 import subprocess
 import tempfile
 import time
 import re
+import zipfile
+from functools import lru_cache
 from typing import List, Union, Dict, Optional, Any
 import ast
 import pandas as pd
@@ -17,8 +21,18 @@ from datetime import datetime
 from .constants import (
     DEFAULT_GLOBAL_GCMS, GLOBAL_SCENARIOS,
     DEFAULT_EUROPE_RCMS, EUROPE_SCENARIOS,
-    ALL_POSSIBLE_YEARS
+    CORDEX_REGIONS,
+    ALL_POSSIBLE_YEARS,
+    FWG_CLI_POSITIONAL, FWG_CLI_KEY_VALUE, FWG_CLI_ENGINE,
+    ENGINE_INTERPOLATION_METHODS, ENGINE_DECOMPOSITION_METHODS,
+    ENGINE_ILLUMINANCE_METHODS, ENGINE_INFRARED_METHODS,
+    ENGINE_MORPHING_METHODS, ENGINE_UNCERTAINTY_VARIANTS,
+    ENGINE_OUTPUT_PROFILES
 )
+
+# Locations of the metadata packaged inside FWG Engine JARs.
+_ENGINE_RESOURCES_DIR = 'futureweathergenerator/resources/'
+_ENGINE_VERSION_PROPERTIES = 'futureweathergenerator/version.properties'
 
 # Import the modern way to access package data (Python 3.9+)
 try:
@@ -131,18 +145,178 @@ def _robust_rmtree(path: str, max_retries: int = 5, delay: float = 0.5):
     logging.error(f"Failed to delete directory {path} after {max_retries} retries.")
 
 
+def _parse_java_properties(text: str) -> Dict[str, str]:
+    """(Private) Parses the simple 'key=value' lines of a Java .properties file."""
+    properties = {}
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith(('#', '!')):
+            continue
+        key, separator, value = line.partition('=')
+        if not separator:
+            key, separator, value = line.partition(':')
+        if separator:
+            properties[key.strip()] = value.strip()
+    return properties
+
+
+def _normalize_scenario_id(value: Any) -> str:
+    """(Private) Normalizes a scenario name for comparison (e.g., 'SSP2-4.5' -> 'ssp245')."""
+    return re.sub(r'[^a-z0-9]', '', str(value).lower())
+
+
+@lru_cache(maxsize=16)
+def _read_distribution_info(jar_path: str, mtime_ns: int, size: int) -> Optional[Dict[str, Any]]:
+    """(Private) Reads and caches the distribution metadata of an FWG Engine JAR.
+
+    The modification time and size are part of the cache key so that a JAR
+    replaced at the same path is read again.
+    """
+    try:
+        with zipfile.ZipFile(jar_path) as jar:
+            names = set(jar.namelist())
+            manifest_entry = _ENGINE_RESOURCES_DIR + 'distribution-manifest.json'
+            if manifest_entry not in names:
+                # JARs prior to the FWG Engine (Global v3/v4, Europe v1/v2) have no manifest.
+                return None
+
+            def read_json(entry: str) -> Dict[str, Any]:
+                return json.loads(jar.read(entry).decode('utf-8-sig'))
+
+            manifest = read_json(manifest_entry)
+            distribution = manifest.get('distribution') or {}
+            climate_source = manifest.get('climateSource') or {}
+            domain = manifest.get('domain') or {}
+
+            def ordered_ids(entries: Any) -> List[str]:
+                entries = [entry for entry in (entries or []) if isinstance(entry, dict) and entry.get('id')]
+                entries.sort(key=lambda entry: entry.get('order', 0))
+                return [str(entry['id']) for entry in entries]
+
+            scenarios = [_normalize_scenario_id(s) for s in ordered_ids(manifest.get('scenarios'))]
+            timeframes = ordered_ids(manifest.get('timeframes'))
+
+            # The climate-model catalog lists the installed products. From schema 1.2
+            # onwards, each entry points to a model manifest with its scenarios, future
+            # periods and ensemble eligibility.
+            model_details = {}
+            catalog_entry = _ENGINE_RESOURCES_DIR + 'climate-model-catalog.json'
+            if catalog_entry in names:
+                for entry in read_json(catalog_entry).get('models') or []:
+                    if not isinstance(entry, dict) or not entry.get('id'):
+                        continue
+                    source = entry
+                    model_manifest_entry = _ENGINE_RESOURCES_DIR + str(entry.get('manifest', ''))
+                    if entry.get('manifest') and model_manifest_entry in names:
+                        source = read_json(model_manifest_entry)
+                    if source.get('futurePeriods'):
+                        model_timeframes = [str(p.get('timeframe')) for p in source['futurePeriods']
+                                            if isinstance(p, dict) and p.get('timeframe')]
+                    else:
+                        model_timeframes = [str(t) for t in source.get('timeframes') or []]
+                    model_details[str(entry['id'])] = {
+                        'display_name': source.get('displayName'),
+                        'ensemble_eligible': bool(source.get('ensembleEligible', True)),
+                        'scenarios': [_normalize_scenario_id(s) for s in source.get('scenarios') or []],
+                        'timeframes': model_timeframes,
+                        'components': source.get('components'),
+                    }
+
+            engine_version = None
+            if _ENGINE_VERSION_PROPERTIES in names:
+                properties = _parse_java_properties(
+                    jar.read(_ENGINE_VERSION_PROPERTIES).decode('utf-8', errors='replace'))
+                engine_version = properties.get('version')
+    except (OSError, zipfile.BadZipFile, ValueError, KeyError, TypeError, AttributeError) as e:
+        logging.debug(f"Could not read FWG distribution metadata from '{jar_path}': {e}")
+        return None
+
+    # Classify the distribution into the tool families handled by pyfwg.
+    framework = str(climate_source.get('framework', '')).upper()
+    grid_domain = domain.get('gridDomain') or None
+    if framework == 'CMIP' or str(domain.get('type', '')).lower() == 'global':
+        tool = 'global'
+    elif grid_domain and str(grid_domain).upper() == 'EUR-11':
+        tool = 'europe'
+    elif framework == 'CORDEX' or grid_domain:
+        tool = 'cordex'
+    else:
+        tool = None
+
+    return {
+        'engine_version': engine_version,
+        'distribution_id': distribution.get('id'),
+        'name': distribution.get('name'),
+        'version': distribution.get('version'),
+        'tool': tool,
+        'scenario_family': distribution.get('scenarioFamily'),
+        'framework': climate_source.get('framework'),
+        'cmip_generation': climate_source.get('cmipGeneration'),
+        'domain': grid_domain,
+        'region': domain.get('region'),
+        'scenarios': scenarios,
+        'timeframes': timeframes,
+        'models': list(model_details),
+        'ensemble_models': [model for model, details in model_details.items() if details['ensemble_eligible']],
+        'model_details': model_details,
+    }
+
+
+def get_fwg_distribution_info(jar_path: str) -> Optional[Dict[str, Any]]:
+    """Reads the metadata packaged inside an FWG Engine distribution JAR.
+
+    Since FWG Global v5, Europe v3 and the CORDEX regional distributions, all
+    distributions share the FWG Engine and package a distribution manifest and a
+    climate-model catalog inside the JAR. This function reads them directly from
+    the JAR file (no Java needed), so that the scenarios, future periods and
+    climate models actually installed in a distribution can be inspected and
+    validated.
+
+    Args:
+        jar_path (str): Path to the FWG JAR file.
+
+    Returns:
+        Optional[Dict[str, Any]]: A dictionary with the keys 'engine_version',
+        'distribution_id', 'name', 'version', 'tool' ('global', 'europe' or
+        'cordex'), 'scenario_family', 'framework', 'cmip_generation', 'domain'
+        (e.g., 'NAM-44'), 'region', 'scenarios' (e.g., ['rcp45', 'rcp85']),
+        'timeframes' (e.g., ['2050', '2080']), 'models', 'ensemble_models' and
+        'model_details'. Returns None if the file does not exist, cannot be read,
+        or is a JAR prior to the FWG Engine (Global v3/v4, Europe v1/v2).
+    """
+    try:
+        stat = os.stat(jar_path)
+    except (OSError, TypeError, ValueError):
+        return None
+    info = _read_distribution_info(os.path.abspath(jar_path), stat.st_mtime_ns, stat.st_size)
+    # Return a copy so that callers cannot modify the cached dictionary.
+    return copy.deepcopy(info)
+
+
 def detect_fwg_version(jar_path: str) -> str:
-    """Detects the major version of the Future Weather Generator from the JAR filename.
+    """Detects the major version of the Future Weather Generator distribution.
+
+    For FWG Engine distributions (Global v5+, Europe v3+ and the CORDEX regional
+    distributions), the version is read from the distribution manifest packaged
+    inside the JAR. Otherwise, it is detected from the JAR filename, which must
+    contain the version (e.g., 'FutureWeatherGenerator_v4.0.2.jar' or
+    'FutureWeatherGenerator-CMIP6-Global-v5.2.0.jar').
 
     Args:
         jar_path (str): The path to the FWG JAR file.
 
     Returns:
-        str: The major version number as a string (e.g., "4", "3").
+        str: The major version number as a string (e.g., "5", "4", "3").
 
     Raises:
-        ValueError: If the version cannot be detected from the filename.
+        ValueError: If the version cannot be detected.
     """
+    info = get_fwg_distribution_info(jar_path)
+    if info and info.get('version'):
+        match = re.match(r'\s*v?(\d+)', str(info['version']))
+        if match:
+            return match.group(1)
+
     filename = os.path.basename(jar_path)
     # Look for 'v' followed by digits and a dot (e.g., 'v4.', 'v3.')
     match = re.search(r'v(\d+)\.', filename)
@@ -151,9 +325,94 @@ def detect_fwg_version(jar_path: str) -> str:
     else:
         raise ValueError(
             f"Could not auto-detect FWG version from filename '{filename}'. "
-            "Please rename the file to include the version (e.g., 'FutureWeatherGenerator_v4.0.2.jar') "
-            "or explicitly provide the 'fwg_version' argument."
+            "Please rename the file to include the version (e.g., 'FutureWeatherGenerator_v4.0.2.jar' or "
+            "'FutureWeatherGenerator-CMIP6-Global-v5.2.0.jar') or explicitly provide the 'fwg_version' argument."
         )
+
+
+def _detect_cordex_domain(jar_path: str) -> Optional[str]:
+    """(Private) Returns the CORDEX domain (e.g., 'NAM-44') of a JAR, or None if unknown."""
+    info = get_fwg_distribution_info(jar_path)
+    if info and info.get('domain'):
+        return str(info['domain']).upper()
+    filename = os.path.basename(jar_path).upper()
+    for domain in CORDEX_REGIONS:
+        if re.search(rf'(?<![A-Z0-9]){re.escape(domain)}(?![0-9])', filename):
+            return domain
+    return None
+
+
+def detect_fwg_tool(jar_path: str) -> Optional[str]:
+    """Detects which Future Weather Generator distribution a JAR belongs to.
+
+    The distribution manifest packaged inside FWG Engine JARs is used when
+    available. Otherwise, the JAR filename is inspected (e.g.,
+    'FutureWeatherGenerator_Europe_v2.0.2.jar' or
+    'FutureWeatherGenerator-CORDEX-CMIP5-North-America-NAM-44-v1.2.0.jar').
+
+    Args:
+        jar_path (str): The path to the FWG JAR file.
+
+    Returns:
+        Optional[str]: 'global', 'europe', 'cordex' (CORDEX regional
+        distributions other than Europe) or 'portugal'. Returns None if the
+        distribution cannot be identified.
+    """
+    info = get_fwg_distribution_info(jar_path)
+    if info and info.get('tool'):
+        return info['tool']
+    filename = os.path.basename(jar_path).lower()
+    if 'portugal' in filename:
+        return 'portugal'
+    domain = _detect_cordex_domain(jar_path)
+    if 'europe' in filename or domain == 'EUR-11':
+        return 'europe'
+    if 'cordex' in filename or domain:
+        return 'cordex'
+    if 'global' in filename or 'cmip6' in filename or re.match(r'futureweathergenerator_v\d', filename):
+        return 'global'
+    return None
+
+
+def get_fwg_cli_style(fwg_version: Union[str, int], tool: str = 'global') -> str:
+    """Returns the command-line interface style used by a version of the tool.
+
+    - 'positional' (``FWG_CLI_POSITIONAL``): Global v3.x and Europe v1.x.
+    - 'key_value' (``FWG_CLI_KEY_VALUE``): Global v4.x and Europe v2.x.
+    - 'engine' (``FWG_CLI_ENGINE``): FWG Engine distributions, i.e., Global v5+,
+      Europe v3+ and all CORDEX regional distributions.
+
+    Args:
+        fwg_version (Union[str, int]): The version of the tool (e.g., '5' or '5.2.0').
+        tool (str, optional): 'global', 'europe' or 'cordex'. Defaults to 'global'.
+
+    Returns:
+        str: The CLI style.
+
+    Raises:
+        ValueError: If the version or the tool are not valid.
+    """
+    match = re.match(r'\s*v?(\d+)', str(fwg_version))
+    if not match:
+        raise ValueError(f"Invalid FWG version: '{fwg_version}'.")
+    major = int(match.group(1))
+    tool = (tool or 'global').lower()
+
+    if tool == 'cordex':
+        # The regional distributions were released directly on the FWG Engine.
+        return FWG_CLI_ENGINE
+    if tool == 'europe':
+        last_positional_version, key_value_version = 1, 2
+    elif tool == 'global':
+        last_positional_version, key_value_version = 3, 4
+    else:
+        raise ValueError(f"Unsupported FWG tool: '{tool}'. Expected 'global', 'europe' or 'cordex'.")
+
+    if major <= last_positional_version:
+        return FWG_CLI_POSITIONAL
+    if major == key_value_version:
+        return FWG_CLI_KEY_VALUE
+    return FWG_CLI_ENGINE
 
 # PREVIOUS VERSION OF uhi_morph
 
@@ -215,6 +474,11 @@ def uhi_morph(*,
     climate of a different Local Climate Zone (LCZ) without applying future
     climate change scenarios.
 
+    The UHI effect is only available in Global v3.x/v4.x and Europe v1.x/v2.x.
+    The FWG Engine distributions (Global v5+, Europe v3+ and the CORDEX regional
+    distributions) no longer support it, so this function raises a ValueError
+    for their JAR files.
+
     By default, this function is designed to "fail fast" by raising an
     exception if the external tool encounters any error. This behavior can be
     controlled with the `raise_on_error` flag, which is useful when this
@@ -245,11 +509,10 @@ def uhi_morph(*,
         FileNotFoundError: If the 'java' command is not found and `raise_on_error` is True.
         subprocess.CalledProcessError: If the FWG tool returns a non-zero exit code
             and `raise_on_error` is True.
+        ValueError: If the version cannot be detected or the JAR is an FWG Engine
+            distribution (without UHI support), and `raise_on_error` is True.
     """
     logging.info(f"--- Applying UHI effect to {os.path.basename(fwg_epw_path)} ---")
-
-    # Ensure the output directory exists before running the tool.
-    os.makedirs(fwg_output_dir, exist_ok=True)
 
     # --- 0. Resolve FWG Version ---
     if fwg_version is None:
@@ -271,14 +534,27 @@ def uhi_morph(*,
         else:
             java_class_path_prefix = 'futureweathergenerator'
 
-    is_v4 = version_str.startswith('4')
     is_europe = 'europe' in java_class_path_prefix.lower()
-    
-    # Use new CLI style (Key-Value) for Global v4+ or Europe v2+
-    use_new_cli = is_v4 or (is_europe and version_str.startswith('2'))
+    detected_tool = detect_fwg_tool(fwg_jar_path)
+    tool = detected_tool if detected_tool in ('europe', 'cordex') else ('europe' if is_europe else 'global')
+    cli_style = get_fwg_cli_style(version_str, tool)
+
+    if cli_style == FWG_CLI_ENGINE:
+        message = (
+            f"UHI morphing is not available in '{os.path.basename(fwg_jar_path)}'. The FWG Engine distributions "
+            "(Global v5+, Europe v3+ and CORDEX regional) do not support the Urban Heat Island effect. "
+            "Use FWG Global v4.x/v3.x or Europe v2.x/v1.x to apply it."
+        )
+        if raise_on_error:
+            raise ValueError(message)
+        logging.error(message)
+        return
+
+    # Ensure the output directory exists before running the tool.
+    os.makedirs(fwg_output_dir, exist_ok=True)
 
     # --- 1. Command Construction ---
-    if use_new_cli:
+    if cli_style == FWG_CLI_KEY_VALUE:
         # --- New CLI Style (Global v4 / Europe v2) Logic ---
         # UHI Morphing is triggered via flags
         # java -jar FWG.jar -epw=... -output_folder=... -uhi=true:orig:target ...
@@ -480,8 +756,10 @@ def check_lcz_availability(*,
                 logging.error(f"STDERR:\n{e.stderr}")
                 return False
 
-        except Exception:
-            # Catch any other exceptions (e.g., Java not found, invalid user input).
+        except Exception as e:
+            # Catch any other exceptions (e.g., Java not found, invalid user input,
+            # or an FWG Engine JAR, which does not support UHI).
+            logging.error(f"LCZ availability check could not be completed: {e}")
             return False
 
 # def get_available_lczs(*,
@@ -699,8 +977,9 @@ def load_runs_from_excel(file_path: str) -> pd.DataFrame:
     # Read the Excel file into a DataFrame.
     df = pd.read_excel(file_path)
 
-    # Define columns that are expected to contain lists.
-    list_like_columns = ['epw_paths', 'fwg_gcms', 'fwg_rcm_pairs', 'keyword_mapping']
+    # Define columns that are expected to contain lists or dictionaries.
+    list_like_columns = ['epw_paths', 'fwg_gcms', 'fwg_rcm_pairs', 'keyword_mapping', 'scenario_mapping',
+                         'fwg_params', 'fwg_scenarios', 'fwg_timeframes', 'fwg_extra_args']
 
     # Iterate through the columns that might need type conversion.
     for col in df.columns:
@@ -762,7 +1041,9 @@ def get_fwg_parameters_info() -> Dict[str, Dict[str, Any]]:
     """Returns a comprehensive dictionary of all FWG parameters, their descriptions, defaults, and allowed values.
 
     This function is intended to help users understand the available options for
-    both the Global and Europe-specific Future Weather Generator tools within `pyfwg`.
+    the Global, Europe-specific and CORDEX regional Future Weather Generator tools
+    within `pyfwg`. Parameters marked with 'requires': 'FWG Engine' are only
+    available for Global v5+, Europe v3+ and the CORDEX regional distributions.
     """
     return {
         'fwg_gcms': {
@@ -772,15 +1053,18 @@ def get_fwg_parameters_info() -> Dict[str, Dict[str, Any]]:
             'applies_to': 'Global'
         },
         'fwg_rcm_pairs': {
-            'description': 'List of GCM-RCM model pairs to use for the Europe-specific tool.',
+            'description': 'List of GCM-RCM model pairs to use for the Europe-specific and CORDEX regional tools.',
             'allowed_values': sorted(list(DEFAULT_EUROPE_RCMS)),
             'default': 'All available RCM pairs',
-            'applies_to': 'Europe'
+            'applies_to': 'Europe, CORDEX regional',
+            'note': ('The pairs of each CORDEX region are listed in pyfwg.CORDEX_REGIONS. FWG Engine '
+                     'distributions accept both "_" and "-" as separators.')
         },
         'fwg_create_ensemble': {
             'description': 'Whether to create an ensemble (average) of all selected models.',
             'allowed_values': [True, False],
-            'default': True
+            'default': True,
+            'note': 'The FWG Engine requires at least two models to create an ensemble.'
         },
         'fwg_winter_sd_shift': {
             'description': 'Standard deviation shift for winter temperatures.',
@@ -799,13 +1083,10 @@ def get_fwg_parameters_info() -> Dict[str, Dict[str, Any]]:
         },
         'fwg_interpolation_method_id': {
             'description': 'Method used for spatial interpolation of climate data.',
-            'allowed_values': {
-                0: 'IDW',
-                1: 'BI',
-                2: 'AVG4P',
-                3: 'NP'
-            },
-            'default': 0
+            'allowed_values': dict(ENGINE_INTERPOLATION_METHODS),
+            'default': 0,
+            'note': ('Global v3 / Europe v1 accept 0-2; Global v4 / Europe v2 accept 0-3; the FWG Engine '
+                     'accepts 0-6. SCI, SGBI and STBI are structured-grid methods of the FWG Engine.')
         },
         'fwg_solar_hour_adjustment': {
             'description': 'Correction method for solar hour based on location.',
@@ -814,7 +1095,8 @@ def get_fwg_parameters_info() -> Dict[str, Dict[str, Any]]:
                 1: 'By_Month',
                 2: 'By_Day'
             },
-            'default': 1
+            'default': 1,
+            'note': 'Deprecated and ignored by the FWG Engine.'
         },
         'fwg_diffuse_irradiation_model': {
             'description': 'The mathematical model used to calculate diffuse horizontal irradiation.',
@@ -823,7 +1105,9 @@ def get_fwg_parameters_info() -> Dict[str, Dict[str, Any]]:
                 1: 'Engerer_2015',
                 2: 'Paulescu_Blaga_2019'
             },
-            'default': 1
+            'default': 1,
+            'note': ('For the FWG Engine, use fwg_decomposition_method instead. A non-default value is '
+                     'translated to the equivalent decomposition method.')
         },
         'fwg_output_type': {
             'description': 'The format of the generated weather files.',
@@ -832,8 +1116,10 @@ def get_fwg_parameters_info() -> Dict[str, Dict[str, Any]]:
         },
         'fwg_add_uhi': {
             'description': 'Whether to apply the Urban Heat Island (UHI) effect using LCZs.',
-            'allowed_values': [True, False],
-            'default': True
+            'allowed_values': [True, False, None],
+            'default': None,
+            'note': ('None applies the UHI effect with tools that support it (Global v3/v4, Europe v1/v2). '
+                     'The FWG Engine does not support UHI.')
         },
         'fwg_epw_original_lcz': {
             'description': 'The Local Climate Zone (LCZ) corresponding to the original EPW file location.',
@@ -858,8 +1144,78 @@ def get_fwg_parameters_info() -> Dict[str, Dict[str, Any]]:
         },
         'fwg_version': {
             'description': 'The version of the Future Weather Generator tool to use.',
-            'allowed_values': ['3', '4', '1', '2'],
-            'default': 'Auto-detected from JAR filename',
-            'note': 'Use 3/4 for Global, 1/2 for Europe.'
+            'allowed_values': ['3', '4', '5', '1', '2'],
+            'default': 'Auto-detected from the JAR',
+            'note': 'Use 3/4/5 for Global, 1/2/3 for Europe and 1 for the CORDEX regional distributions.'
+        },
+        'fwg_scenarios': {
+            'description': 'Subset of climate scenarios to generate (e.g., [\'ssp245\', \'ssp585\'] or [\'rcp85\']).',
+            'default': 'All scenarios of the distribution',
+            'requires': 'FWG Engine'
+        },
+        'fwg_timeframes': {
+            'description': 'Subset of future periods to generate.',
+            'allowed_values': list(ALL_POSSIBLE_YEARS),
+            'default': 'All periods of the distribution',
+            'requires': 'FWG Engine'
+        },
+        'fwg_decomposition_method': {
+            'description': 'Solar decomposition model used to split global radiation into direct and diffuse components.',
+            'allowed_values': list(ENGINE_DECOMPOSITION_METHODS),
+            'default': 'MULTIMODEL_CONSTRAINED_ENSEMBLE (tool default)',
+            'requires': 'FWG Engine'
+        },
+        'fwg_illuminance_method': {
+            'description': 'Model used to regenerate the illuminance and zenith luminance fields.',
+            'allowed_values': list(ENGINE_ILLUMINANCE_METHODS),
+            'default': 'PEREZ_1990 (tool default)',
+            'requires': 'FWG Engine'
+        },
+        'fwg_infrared_method': {
+            'description': 'Model used for horizontal infrared radiation from the sky.',
+            'allowed_values': list(ENGINE_INFRARED_METHODS),
+            'default': 'FWG_CURRENT (tool default)',
+            'requires': 'FWG Engine',
+            'note': 'Available from Global v5.2, Europe v3.2 and CORDEX regional v1.2 (FWG Engine v1.1).'
+        },
+        'fwg_morphing_method': {
+            'description': 'Climate morphing methodology.',
+            'allowed_values': list(ENGINE_MORPHING_METHODS),
+            'default': 'CLASSIC_MONTHLY (tool default)',
+            'requires': 'FWG Engine',
+            'note': 'DISTRIBUTION_AWARE is experimental.'
+        },
+        'fwg_uncertainty_variant': {
+            'description': 'Climate-signal uncertainty case to generate (deterministic boundary cases).',
+            'allowed_values': list(ENGINE_UNCERTAINTY_VARIANTS),
+            'default': 'CENTRAL (tool default)',
+            'requires': 'FWG Engine',
+            'note': 'Non-central variants cannot be combined with non-zero winter/summer SD shifts.'
+        },
+        'fwg_uncertainty_sigma': {
+            'description': 'Standard-deviation multiplier used by the uncertainty variant.',
+            'range': [0.0, None],
+            'default': '1.0 (tool default)',
+            'requires': 'FWG Engine'
+        },
+        'fwg_output_profile': {
+            'description': 'Set of reports, manifests and diagnostics written by the tool alongside the weather files.',
+            'allowed_values': list(ENGINE_OUTPUT_PROFILES),
+            'default': 'STANDARD (tool default)',
+            'requires': 'FWG Engine',
+            'note': 'These auxiliary files remain in the temporary folder (see delete_temp_files).'
+        },
+        'fwg_model_unzipped_folder': {
+            'description': ('Folder where the tool caches the unzipped climate-model data. Reusing it '
+                            'across runs avoids extracting the data again.'),
+            'default': 'Temporary output folder of each run (tool default)',
+            'requires': 'FWG Engine'
+        },
+        'fwg_extra_args': {
+            'description': ('Additional command-line options passed to the tool as -key=value (e.g., '
+                            '{\'threads\': 4, \'save_present_day\': True}).'),
+            'default': None,
+            'applies_to': 'Global v4+, Europe v2+, CORDEX regional',
+            'note': 'Options that pyfwg already sets (e.g., epw, output_folder or models) cannot be overridden.'
         },
     }

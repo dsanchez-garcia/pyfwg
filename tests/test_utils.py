@@ -35,6 +35,10 @@ def test_detect_fwg_version(fwg_jars):
     assert detect_fwg_version(fwg_jars["GLOBAL_V3"]) == "3"
     assert detect_fwg_version(fwg_jars["EUROPE_V2"]) == "2"
     assert detect_fwg_version(fwg_jars["EUROPE_V1"]) == "1"
+    # FWG Engine distributions use a new naming scheme
+    assert detect_fwg_version(fwg_jars["GLOBAL_V5"]) == "5"
+    assert detect_fwg_version(fwg_jars["EUROPE_V3"]) == "3"
+    assert detect_fwg_version(fwg_jars["CORDEX_NAM"]) == "1"
     
     # Negative test: ensure it raises an error if no version pattern is found
     with pytest.raises(ValueError, match="Could not auto-detect FWG version"):

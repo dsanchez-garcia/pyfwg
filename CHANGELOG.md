@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Support for the FWG Engine distributions**: The latest Future Weather Generator distributions share a common engine (FWG Engine v1.x) with a new command line. `MorphingWorkflowGlobal`/`morph_epw_global` now support **Global v5.x** (FWG CMIP6 Global) and `MorphingWorkflowEurope`/`morph_epw_europe` support **Europe v3.x** (FWG CORDEX-CMIP5 Europe EUR-11). `pyfwg` builds the new command (`-g` action and organized output layout) and collects the weather files from the `weather` subfolder written by the engine.
+- **CORDEX Regional Distributions**: Added the `MorphingWorkflowCordex` class and the `morph_epw_cordex` function for the CORDEX-CMIP5 regional distributions (Middle East and North Africa MNA-22, Africa AFR-22, North America NAM-44, Central America CAM-44, South America SAM-44, West & South Asia WAS-22, Southeast Asia SEA-22 and Australasia AUS-22). The region is identified from the JAR and only its scenarios and GCM-RCM pairs are accepted. Added the `CORDEX_REGIONS`, `CORDEX_SCENARIOS` and `DEFAULT_CORDEX_RCMS` constants.
+- **New FWG Engine Arguments**: All workflows, API functions and `MorphingIterator.set_default_values` accept `fwg_scenarios`, `fwg_timeframes`, `fwg_decomposition_method`, `fwg_illuminance_method`, `fwg_infrared_method`, `fwg_morphing_method`, `fwg_uncertainty_variant`, `fwg_uncertainty_sigma`, `fwg_output_profile` and `fwg_model_unzipped_folder`. They default to `None`, which keeps the default of the tool, and are validated before execution. When scenarios or periods are selected, the rename plan only includes them.
+- **Additional Command-Line Options**: The new `fwg_extra_args` argument passes any other `-key=value` option to the key-value command lines (Global v4+, Europe v2+ and CORDEX regional), except the options already set by `pyfwg`.
+- **New Interpolation Methods**: `fwg_interpolation_method_id` accepts the structured-grid methods of the FWG Engine: `SCI` (4), `SGBI` (5) and `STBI` (6).
+- **JAR Inspection Utilities**: Added `get_fwg_distribution_info`, which reads the distribution manifest and the climate-model catalog packaged in FWG Engine JARs (scenarios, periods, models and versions), `detect_fwg_tool` and `get_fwg_cli_style`. The workflows use the JAR metadata, when available, to validate models, scenarios and periods.
+- **Version Detection**: `detect_fwg_version` recognizes the new JAR names (e.g., `FutureWeatherGenerator-CMIP6-Global-v5.2.0.jar`) and reads the version from FWG Engine JARs whose filename does not include it.
+
+### Changed
+- **UHI Default**: `fwg_add_uhi` now defaults to `None`. The UHI effect is applied as before with Global v3/v4 and Europe v1/v2 and skipped with the FWG Engine, which does not support it (an explicit `fwg_add_uhi=True` is ignored with a warning). `uhi_morph` raises a `ValueError` and `check_lcz_availability` returns `False` for FWG Engine JARs.
+- **Legacy Solar Options with the FWG Engine**: `fwg_solar_hour_adjustment` is ignored (the engine deprecated it), and `fwg_diffuse_irradiation_model` is only translated into `fwg_decomposition_method` when it differs from its default, so that the engine's default (`MULTIMODEL_CONSTRAINED_ENSEMBLE`) is used otherwise.
+- **Single-Model Ensembles**: The FWG Engine requires at least two models to create an ensemble, so `fwg_create_ensemble` is set to `False` (with a warning) when a single model is selected.
+- **Parameter Precedence**: Explicit `fwg_` arguments left as `None` no longer override the values provided in `fwg_params`.
+- **Enum Validation**: The allowed values of the interpolation method, solar hour adjustment and diffuse model are now enforced for each version of the tool (they were defined but not applied).
+- **Iterator Defaults**: `MorphingIterator.set_default_values` also accepts `fwg_output_type`, and ignores with a warning any argument that the workflow class does not accept (e.g., `fwg_add_uhi` for `MorphingWorkflowCordex`).
+- **Excel Integration**: `load_runs_from_excel` also converts the `scenario_mapping`, `fwg_params`, `fwg_scenarios`, `fwg_timeframes` and `fwg_extra_args` columns.
+- **Global v4 / Europe v2 Commands**: `fwg_limit_variables` is now passed to the tool (`-epw_dictionary_limits`); it was previously ignored. The default list of models is passed in a deterministic (sorted) order.
+
+### Fixed
+- The simple API functions no longer move the temporary copy of the input EPW file to the output folder, and they now move the `.met` and `.csv` weather files of the `SPAIN_MET` and `PORTUGAL_CSV` output types.
+- Only the weather and `.stat` files of the selected output type are renamed, and a generated file is no longer silently overwritten when several files map to the same final name (the first one is kept and a warning is logged).
+- A run of the tool that exceeds the time limit is reported as failed instead of stopping the whole workflow.
+- `check_lcz_availability` logs unexpected errors instead of failing silently.
+- Error messages referred to `set_morphing_config()` instead of `configure_and_preview()`.
 
 ## [0.3.0] - 2025-12-29
 

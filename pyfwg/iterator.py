@@ -115,7 +115,20 @@ class MorphingIterator:
                            fwg_add_uhi: Optional[bool] = None,
                            fwg_epw_original_lcz: Optional[int] = None,
                            fwg_target_uhi_lcz: Optional[int] = None,
-                           fwg_version: Optional[Union[str, int]] = None):
+                           fwg_output_type: Optional[str] = None,
+                           fwg_version: Optional[Union[str, int]] = None,
+                           # --- FWG Engine arguments (Global v5+, Europe v3+, CORDEX regional) ---
+                           fwg_scenarios: Optional[List[str]] = None,
+                           fwg_timeframes: Optional[List[Union[int, str]]] = None,
+                           fwg_decomposition_method: Optional[str] = None,
+                           fwg_illuminance_method: Optional[str] = None,
+                           fwg_infrared_method: Optional[str] = None,
+                           fwg_morphing_method: Optional[str] = None,
+                           fwg_uncertainty_variant: Optional[str] = None,
+                           fwg_uncertainty_sigma: Optional[float] = None,
+                           fwg_output_profile: Optional[str] = None,
+                           fwg_model_unzipped_folder: Optional[str] = None,
+                           fwg_extra_args: Optional[Dict[str, Any]] = None):
         """Sets default parameter values for all runs in the batch.
 
         This method is a convenient way to define parameters that are common
@@ -131,9 +144,10 @@ class MorphingIterator:
 
         The method has an explicit signature for all possible arguments,
         providing auto-completion and type hints in your editor. It also
-        includes a validation check to warn the user if they provide a
-        model-specific argument that is not applicable to the chosen workflow
-        (e.g., providing `fwg_rcm_pairs` for a `MorphingWorkflowGlobal` instance).
+        includes a validation check to warn the user if they provide an
+        argument that is not applicable to the chosen workflow (e.g., providing
+        `fwg_rcm_pairs` for a `MorphingWorkflowGlobal` instance, or
+        `fwg_add_uhi` for a `MorphingWorkflowCordex` instance).
 
         Args:
             * (keyword-only): All arguments must be specified by name.
@@ -152,25 +166,30 @@ class MorphingIterator:
             'fwg_use_multithreading': fwg_use_multithreading, 'fwg_interpolation_method_id': fwg_interpolation_method_id,
             'fwg_limit_variables': fwg_limit_variables, 'fwg_solar_hour_adjustment': fwg_solar_hour_adjustment,
             'fwg_diffuse_irradiation_model': fwg_diffuse_irradiation_model, 'fwg_add_uhi': fwg_add_uhi,
-            'fwg_diffuse_irradiation_model': fwg_diffuse_irradiation_model, 'fwg_add_uhi': fwg_add_uhi,
             'fwg_epw_original_lcz': fwg_epw_original_lcz, 'fwg_target_uhi_lcz': fwg_target_uhi_lcz,
-            'fwg_version': fwg_version
+            'fwg_output_type': fwg_output_type, 'fwg_version': fwg_version,
+            'fwg_scenarios': fwg_scenarios, 'fwg_timeframes': fwg_timeframes,
+            'fwg_decomposition_method': fwg_decomposition_method, 'fwg_illuminance_method': fwg_illuminance_method,
+            'fwg_infrared_method': fwg_infrared_method, 'fwg_morphing_method': fwg_morphing_method,
+            'fwg_uncertainty_variant': fwg_uncertainty_variant, 'fwg_uncertainty_sigma': fwg_uncertainty_sigma,
+            'fwg_output_profile': fwg_output_profile, 'fwg_model_unzipped_folder': fwg_model_unzipped_folder,
+            'fwg_extra_args': fwg_extra_args
         }
 
         # Filter out any arguments that were not provided (are None).
         self.custom_defaults = {key: value for key, value in provided_args.items() if value is not None}
 
         # --- Validation and Warning Logic ---
-        correct_model_arg = f"fwg_{self.workflow_class.model_arg_name}"
-        incorrect_model_arg = 'fwg_rcm_pairs' if correct_model_arg == 'fwg_gcms' else 'fwg_gcms'
-
-        if incorrect_model_arg in self.custom_defaults:
+        # Arguments that the workflow's configuration method does not accept
+        # (e.g., 'fwg_rcm_pairs' for MorphingWorkflowGlobal) are ignored.
+        accepted_args = inspect.signature(self.workflow_class.configure_and_preview).parameters
+        for inapplicable_arg in [key for key in self.custom_defaults if key not in accepted_args]:
             logging.warning(
-                f"Argument '{incorrect_model_arg}' is not applicable for "
+                f"Argument '{inapplicable_arg}' is not applicable for "
                 f"{self.workflow_class.__name__} and will be ignored."
             )
             # Remove the inapplicable argument so it's not used later.
-            self.custom_defaults.pop(incorrect_model_arg)
+            self.custom_defaults.pop(inapplicable_arg)
 
         logging.info(f"Custom default values have been set for the iterator: {self.custom_defaults}")
 
@@ -411,7 +430,9 @@ class MorphingIterator:
         # --- Validation Layer 1: Proactive check for varying parameters ---
         varying_columns = []
         # These columns are expected to be different per run but don't need to be in the filename pattern.
-        ignore_cols = ['epw_paths', 'final_output_dir', 'input_filename_pattern', 'keyword_mapping']
+        # The selected scenarios and periods are already covered by the scenario and {year} placeholders.
+        ignore_cols = ['epw_paths', 'final_output_dir', 'input_filename_pattern', 'keyword_mapping',
+                       'fwg_scenarios', 'fwg_timeframes', 'fwg_model_unzipped_folder']
 
         for col in plan_df.columns:
             if col in ignore_cols:

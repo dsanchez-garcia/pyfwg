@@ -68,18 +68,18 @@ except ImportError:
 # --- Public API Definition ---
 
 # Define the official version of the library.
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 # Import the main classes for the advanced, step-by-step workflows.
 # This makes them accessible as `pyfwg.MorphingWorkflowGlobal`.
-from .workflow import MorphingWorkflowGlobal, MorphingWorkflowEurope
+from .workflow import MorphingWorkflowGlobal, MorphingWorkflowEurope, MorphingWorkflowCordex
 
 # Import the iterator class for running multiple morphing scenarios.
 from .iterator import MorphingIterator
 
 # Import the high-level convenience functions for direct, one-shot usage.
 # This makes them accessible as `pyfwg.morph_epw_global`.
-from .api import morph_epw_global, morph_epw_europe
+from .api import morph_epw_global, morph_epw_europe, morph_epw_cordex
 
 # Import utility functions that are useful for users, such as pre-flight checks.
 # This makes them accessible as `pyfwg.check_lcz_availability`.
@@ -91,6 +91,9 @@ from .utils import (
     export_template_to_excel,
     load_runs_from_excel,
     detect_fwg_version,
+    detect_fwg_tool,
+    get_fwg_cli_style,
+    get_fwg_distribution_info,
     sanitize_epw_minutes,
     get_fwg_parameters_info
 )
@@ -100,7 +103,10 @@ from .utils import (
 from .constants import (
     DEFAULT_GLOBAL_GCMS,
     DEFAULT_EUROPE_RCMS,
+    DEFAULT_CORDEX_RCMS,
+    CORDEX_REGIONS,
     GLOBAL_SCENARIOS,
     EUROPE_SCENARIOS,
+    CORDEX_SCENARIOS,
     ALL_POSSIBLE_YEARS
 )
