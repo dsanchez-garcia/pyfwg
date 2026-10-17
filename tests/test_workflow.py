@@ -9,8 +9,10 @@ These classes manage the full state machine of a morphing run:
 """
 
 import os
+import logging
 import pytest
 import shutil
+import numpy as np
 from unittest.mock import MagicMock, patch
 from pyfwg.workflow import MorphingWorkflowGlobal, MorphingWorkflowEurope
 
@@ -20,6 +22,14 @@ def temp_epw(tmp_path):
     epw = tmp_path / "madrid_2010.epw"
     epw.write_text("dummy epw content")
     return str(epw)
+
+def configure_global(epw_path, out_dir, pattern="{city}_{ssp}_{year}", **kwargs):
+    """Helper that maps one EPW file and configures a Global workflow with a JAR name without version."""
+    wf = MorphingWorkflowGlobal()
+    wf.map_categories([epw_path], keyword_mapping={"city": {"Madrid": "madrid"}})
+    wf.configure_and_preview(final_output_dir=out_dir, output_filename_pattern=pattern,
+                             fwg_jar_path="FWG.jar", **kwargs)
+    return wf
 
 def test_workflow_mapping_pattern(temp_epw):
     """
@@ -211,3 +221,158 @@ def test_build_command_v3():
     assert "futureweathergenerator.Morph" in cmd # The main class for v3
     assert "CanESM5" in cmd
     assert "1:14:1" in cmd # The encoded UHI string
+
+# --- Parameter precedence and type normalization ---
+
+def test_fwg_params_used_when_arguments_are_not_passed(temp_epw, tmp_path):
+    """
+    The values of fwg_params apply to the parameters that are not passed as
+    explicit fwg_ arguments, instead of being replaced by their defaults.
+    """
+    wf = configure_global(temp_epw, str(tmp_path / "out"), fwg_version=4, fwg_params={
+        "winter_sd_shift": 1.5,
+        "month_transition_hours": 24,
+        "create_ensemble": False,
+        "interpolation_method_id": 2,
+        "epw_original_lcz": 6,
+        "output_type": "SPAIN_MET",
+    })
+    assert wf.is_config_valid
+    params = wf.inputs["fwg_params"]
+    assert params["winter_sd_shift"] == 1.5
+    assert params["month_transition_hours"] == 24
+    assert params["create_ensemble"] is False
+    assert params["interpolation_method_id"] == 2
+
+    cmd = wf._build_command_new_cli(temp_epw, "temp.epw", "out")
+    assert "-temp_shift_winter=1.5" in cmd
+    assert "-smooth_hours=24" in cmd
+    assert "-ensemble=false" in cmd
+    assert "-grid_interpolation_method=AVG4P" in cmd
+    assert "-uhi=true:6:1" in cmd
+    assert "-output_type=SPAIN_MET" in cmd
+
+def test_explicit_arguments_override_fwg_params(temp_epw, tmp_path):
+    """
+    An explicit fwg_ argument overrides fwg_params, even when it is passed with
+    its default value. Parameters set in neither place take the defaults.
+    """
+    wf = configure_global(temp_epw, str(tmp_path / "out"), fwg_version=4,
+                          fwg_params={"month_transition_hours": 24, "winter_sd_shift": 1.5},
+                          fwg_month_transition_hours=72)
+    params = wf.inputs["fwg_params"]
+    assert params["month_transition_hours"] == 72
+    assert params["winter_sd_shift"] == 1.5
+    assert params["summer_sd_shift"] == 0.0
+    assert params["create_ensemble"] is True
+    assert params["interpolation_method_id"] == 0
+    assert params["epw_original_lcz"] == 14
+    assert params["output_type"] == "EPW"
+
+def test_float_values_reach_the_tool_as_integers(temp_epw, tmp_path):
+    """
+    Integer parameters given as floats or NumPy numbers (e.g., read from Excel or
+    from a DataFrame with gaps) reach the command line and the filenames as integers.
+    """
+    kwargs = dict(
+        fwg_epw_original_lcz=14.0,
+        fwg_target_uhi_lcz=np.float64(2.0),
+        fwg_month_transition_hours=np.int64(72),
+        fwg_interpolation_method_id=0.0,
+        fwg_solar_hour_adjustment=2.0,
+        fwg_diffuse_irradiation_model=np.float64(0.0),
+        fwg_winter_sd_shift="0.5",
+    )
+    out_dir = str(tmp_path / "out")
+
+    # Global v4: key-value command line
+    wf = configure_global(temp_epw, out_dir, pattern="{city}_{ssp}_{year}_LCZ{fwg_epw_original_lcz}",
+                          fwg_version=4, **kwargs)
+    assert wf.is_config_valid
+    cmd = wf._build_command_new_cli(temp_epw, "temp.epw", "out")
+    assert "-uhi=true:14:2" in cmd
+    assert "-smooth_hours=72" in cmd
+    assert "-temp_shift_winter=0.5" in cmd
+    assert "-grid_interpolation_method=IDW" in cmd
+    assert "-solar_correction=By_Day" in cmd
+    assert "-diffuse_method=Ridley_Boland_Lauret_2010" in cmd
+    assert wf.rename_plan[temp_epw]["ssp126_2050.epw"].endswith("Madrid_ssp126_2050_LCZ14.epw")
+
+    # Global v3: positional command line
+    wf = configure_global(temp_epw, out_dir, fwg_version=3.0, **kwargs)
+    assert wf.is_config_valid
+    assert wf.inputs["fwg_params"]["fwg_version"] == "3"
+    formatted = wf.inputs["fwg_params_formatted"]
+    assert formatted["uhi_combined"] == "1:14:2"
+    assert formatted["month_transition_hours"] == "72"
+    assert formatted["sd_shift"] == "0.5:0.0"
+    assert formatted["interpolation_method_id"] == "0"
+    assert formatted["solar_hour_adjustment_option"] == "2"
+    assert formatted["diffuse_irradiation_model_option"] == "0"
+
+    # FWG Engine
+    wf = configure_global(temp_epw, out_dir, fwg_version=5, fwg_month_transition_hours=48.0, fwg_timeframes=2050.0)
+    assert wf.is_config_valid
+    cmd = wf._build_command_engine(temp_epw, "temp.epw", "out")
+    assert "-smooth_hours=48" in cmd
+    assert "-timeframes=2050" in cmd
+
+@pytest.mark.parametrize("invalid_kwargs", [
+    {"fwg_epw_original_lcz": 14.5},
+    {"fwg_target_uhi_lcz": "two"},
+    {"fwg_month_transition_hours": 72.5},
+    {"fwg_winter_sd_shift": "high"},
+    {"fwg_summer_sd_shift": float("nan")},
+    {"fwg_interpolation_method_id": 1.5},
+    {"fwg_interpolation_method_id": True},
+])
+def test_invalid_numbers_are_rejected(temp_epw, tmp_path, invalid_kwargs):
+    """Values that are not valid numbers make the configuration invalid, without errors or truncation."""
+    wf = configure_global(temp_epw, str(tmp_path / "out"), fwg_version=4, **invalid_kwargs)
+    assert not wf.is_config_valid
+
+def test_boolean_flags_are_interpreted_strictly(temp_epw, tmp_path, caplog):
+    """
+    Flags given as 1/0, NumPy booleans or 'True'/'False' strings (e.g., read from
+    Excel) mean the same with every version of the tool.
+    """
+    out_dir = str(tmp_path / "out")
+
+    # Global v4: key-value command line
+    wf = configure_global(temp_epw, out_dir, fwg_version=4, fwg_add_uhi=1, fwg_create_ensemble="False",
+                          fwg_use_multithreading=np.bool_(False), fwg_limit_variables=0.0)
+    assert wf.is_config_valid
+    cmd = wf._build_command_new_cli(temp_epw, "temp.epw", "out")
+    assert "-uhi=true:14:1" in cmd
+    assert "-ensemble=false" in cmd
+    assert "-multithread=false" in cmd
+    assert "-epw_dictionary_limits=false" in cmd
+
+    # Global v3: positional command line
+    wf = configure_global(temp_epw, out_dir, fwg_version=3, fwg_add_uhi="False", fwg_create_ensemble=0,
+                          fwg_use_multithreading="TRUE", fwg_limit_variables=np.bool_(True))
+    assert wf.is_config_valid
+    formatted = wf.inputs["fwg_params_formatted"]
+    assert formatted["uhi_combined"] == "0:14:1"
+    assert formatted["ensemble"] == "0"
+    assert formatted["do_multithred_computation"] == "true"
+    assert formatted["do_limit_variables"] == "true"
+
+    # FWG Engine: 'False' does not request the (unsupported) UHI effect
+    with caplog.at_level(logging.WARNING, logger="pyfwg"):
+        wf = configure_global(temp_epw, out_dir, fwg_version=5, fwg_gcms=["CanESM5", "MIROC6"],
+                              fwg_create_ensemble="false", fwg_add_uhi="False")
+    assert wf.is_config_valid
+    assert "-ensemble=false" in wf._build_command_engine(temp_epw, "temp.epw", "out")
+    assert "Urban Heat Island" not in caplog.text
+
+@pytest.mark.parametrize("invalid_kwargs", [
+    {"fwg_add_uhi": "maybe"},
+    {"fwg_create_ensemble": 2},
+    {"fwg_use_multithreading": "yes"},
+    {"fwg_limit_variables": 0.5},
+])
+def test_invalid_flags_are_rejected(temp_epw, tmp_path, invalid_kwargs):
+    """Values that are not booleans make the configuration invalid instead of being guessed."""
+    wf = configure_global(temp_epw, str(tmp_path / "out"), fwg_version=4, **invalid_kwargs)
+    assert not wf.is_config_valid

@@ -15,6 +15,8 @@ from .workflow import (
 # Import utility functions
 from .utils import _robust_rmtree, check_lcz_availability
 
+logger = logging.getLogger(__name__)
+
 
 def _run_direct_morphing(workflow, output_dir: str) -> List[str]:
     """(Private) Runs a configured workflow and moves the generated files without renaming them.
@@ -36,7 +38,8 @@ def _run_direct_morphing(workflow, output_dir: str) -> List[str]:
     """
     # Block execution if the configuration was found to be invalid.
     if not workflow.is_config_valid:
-        raise ValueError("FWG parameter validation failed. Please check the warnings in the log above.")
+        raise ValueError("FWG parameter validation failed. Please check the warnings in the log above "
+                         "(if they are not shown, call pyfwg.enable_console_logging()).")
 
     # Create the final output directory if it doesn't exist.
     os.makedirs(output_dir, exist_ok=True)
@@ -51,7 +54,7 @@ def _run_direct_morphing(workflow, output_dir: str) -> List[str]:
         # --- Pre-flight check for LCZ availability ---
         fwg_params = workflow.inputs['fwg_params']
         if fwg_params.get('add_uhi', False):
-            logging.info(f"Validating LCZ availability for {os.path.basename(epw_path)}...")
+            logger.info(f"Validating LCZ availability for {os.path.basename(epw_path)}...")
             lcz_validation_result = check_lcz_availability(
                 epw_path=epw_path,
                 original_lcz=fwg_params.get('epw_original_lcz'),
@@ -62,13 +65,13 @@ def _run_direct_morphing(workflow, output_dir: str) -> List[str]:
             )
             # If validation fails, log the detailed error and skip this file.
             if lcz_validation_result is not True:
-                logging.error(f"LCZ validation failed for '{os.path.basename(epw_path)}'. This file will be skipped.")
+                logger.error(f"LCZ validation failed for '{os.path.basename(epw_path)}'. This file will be skipped.")
                 if isinstance(lcz_validation_result, dict):
                     for error_message in lcz_validation_result.get("invalid_messages", []):
-                        logging.error(error_message)
-                    logging.error("The following LCZs are available for this location:")
+                        logger.error(error_message)
+                    logger.error("The following LCZs are available for this location:")
                     for lcz in lcz_validation_result.get("available", []):
-                        logging.error(f"- {lcz}")
+                        logger.error(f"- {lcz}")
                 continue
 
         # Reuse the low-level execution method from the class.
@@ -276,19 +279,19 @@ def morph_epw_global(*,
                      fwg_params: Optional[Dict[str, Any]] = None,
                      # --- Explicit Future Weather Generator Arguments ---
                      fwg_gcms: Optional[List[str]] = None,
-                     fwg_create_ensemble: bool = True,
-                     fwg_winter_sd_shift: float = 0.0,
-                     fwg_summer_sd_shift: float = 0.0,
-                     fwg_month_transition_hours: int = 72,
-                     fwg_use_multithreading: bool = True,
-                     fwg_interpolation_method_id: Union[int, str] = 0,
-                     fwg_limit_variables: bool = True,
-                     fwg_solar_hour_adjustment: Union[int, str] = 1,
-                     fwg_diffuse_irradiation_model: Union[int, str] = 1,
+                     fwg_create_ensemble: Optional[bool] = None,
+                     fwg_winter_sd_shift: Optional[float] = None,
+                     fwg_summer_sd_shift: Optional[float] = None,
+                     fwg_month_transition_hours: Optional[int] = None,
+                     fwg_use_multithreading: Optional[bool] = None,
+                     fwg_interpolation_method_id: Optional[Union[int, str]] = None,
+                     fwg_limit_variables: Optional[bool] = None,
+                     fwg_solar_hour_adjustment: Optional[Union[int, str]] = None,
+                     fwg_diffuse_irradiation_model: Optional[Union[int, str]] = None,
                      fwg_add_uhi: Optional[bool] = None,
-                     fwg_epw_original_lcz: int = 14,
-                     fwg_target_uhi_lcz: int = 1,
-                     fwg_output_type: str = 'EPW',
+                     fwg_epw_original_lcz: Optional[int] = None,
+                     fwg_target_uhi_lcz: Optional[int] = None,
+                     fwg_output_type: Optional[str] = None,
                      fwg_version: Optional[Union[str, int]] = None,
                      # --- FWG Engine Arguments (Global v5+) ---
                      fwg_scenarios: Optional[List[str]] = None,
@@ -329,7 +332,10 @@ def morph_epw_global(*,
         fwg_show_tool_output (bool, optional): If True, prints the FWG tool's
             console output in real-time. Defaults to False.
         fwg_params (Optional[Dict[str, Any]], optional): A dictionary for base
-            FWG parameters. Any explicit `fwg_` argument will override this.
+            FWG parameters, with keys without the 'fwg_' prefix. Any explicit
+            `fwg_` argument that is passed will override this. The explicit
+            `fwg_` arguments default to None, which uses the value of
+            `fwg_params` or, if it is not set there, the default of pyfwg.
             Defaults to None.
         fwg_gcms (Optional[List[str]], optional): List of GCMs to use.
         (All other `fwg_` arguments are passed directly to the tool and are
@@ -342,7 +348,7 @@ def morph_epw_global(*,
     Raises:
         ValueError: If the provided FWG parameters fail validation.
     """
-    logging.info("--- Starting Direct Global Morphing Process ---")
+    logger.info("--- Starting Direct Global Morphing Process ---")
 
     # Instantiate the corresponding workflow class to use as an internal engine.
     workflow = MorphingWorkflowGlobal()
@@ -406,7 +412,7 @@ def morph_epw_global(*,
     # Run the workflow and move the generated files without renaming them.
     final_file_paths = _run_direct_morphing(workflow, output_dir)
 
-    logging.info(f"Direct global morphing complete. {len(final_file_paths)} files created in {os.path.abspath(output_dir)}")
+    logger.info(f"Direct global morphing complete. {len(final_file_paths)} files created in {os.path.abspath(output_dir)}")
     return final_file_paths
 
 
@@ -576,19 +582,19 @@ def morph_epw_europe(*,
                      fwg_params: Optional[Dict[str, Any]] = None,
                      # --- Explicit Future Weather Generator Arguments ---
                      fwg_rcm_pairs: Optional[List[str]] = None,
-                     fwg_create_ensemble: bool = True,
-                     fwg_winter_sd_shift: float = 0.0,
-                     fwg_summer_sd_shift: float = 0.0,
-                     fwg_month_transition_hours: int = 72,
-                     fwg_use_multithreading: bool = True,
-                     fwg_interpolation_method_id: Union[int, str] = 0,
-                     fwg_limit_variables: bool = True,
-                     fwg_solar_hour_adjustment: Union[int, str] = 1,
-                     fwg_diffuse_irradiation_model: Union[int, str] = 1,
+                     fwg_create_ensemble: Optional[bool] = None,
+                     fwg_winter_sd_shift: Optional[float] = None,
+                     fwg_summer_sd_shift: Optional[float] = None,
+                     fwg_month_transition_hours: Optional[int] = None,
+                     fwg_use_multithreading: Optional[bool] = None,
+                     fwg_interpolation_method_id: Optional[Union[int, str]] = None,
+                     fwg_limit_variables: Optional[bool] = None,
+                     fwg_solar_hour_adjustment: Optional[Union[int, str]] = None,
+                     fwg_diffuse_irradiation_model: Optional[Union[int, str]] = None,
                      fwg_add_uhi: Optional[bool] = None,
-                     fwg_epw_original_lcz: int = 14,
-                     fwg_target_uhi_lcz: int = 1,
-                     fwg_output_type: str = 'EPW',
+                     fwg_epw_original_lcz: Optional[int] = None,
+                     fwg_target_uhi_lcz: Optional[int] = None,
+                     fwg_output_type: Optional[str] = None,
                      fwg_version: Optional[Union[str, int]] = None,
                      # --- FWG Engine Arguments (Europe v3+) ---
                      fwg_scenarios: Optional[List[str]] = None,
@@ -629,7 +635,10 @@ def morph_epw_europe(*,
         fwg_show_tool_output (bool, optional): If True, prints the FWG tool's
             console output in real-time. Defaults to False.
         fwg_params (Optional[Dict[str, Any]], optional): A dictionary for base
-            FWG parameters. Any explicit `fwg_` argument will override this.
+            FWG parameters, with keys without the 'fwg_' prefix. Any explicit
+            `fwg_` argument that is passed will override this. The explicit
+            `fwg_` arguments default to None, which uses the value of
+            `fwg_params` or, if it is not set there, the default of pyfwg.
             Defaults to None.
         fwg_rcm_pairs (Optional[List[str]], optional): List of GCM-RCM pairs
             to use. If None, the tool's default list is used.
@@ -644,7 +653,7 @@ def morph_epw_europe(*,
     Raises:
         ValueError: If the provided FWG parameters fail validation.
     """
-    logging.info("--- Starting Europe-Specific Direct Morphing Process ---")
+    logger.info("--- Starting Europe-Specific Direct Morphing Process ---")
 
     # Instantiate the corresponding workflow class to use as an internal engine.
     workflow = MorphingWorkflowEurope()
@@ -707,7 +716,7 @@ def morph_epw_europe(*,
     # Run the workflow and move the generated files without renaming them.
     final_file_paths = _run_direct_morphing(workflow, output_dir)
 
-    logging.info(f"Europe morphing complete. {len(final_file_paths)} files created in {os.path.abspath(output_dir)}")
+    logger.info(f"Europe morphing complete. {len(final_file_paths)} files created in {os.path.abspath(output_dir)}")
     return final_file_paths
 
 
@@ -721,14 +730,14 @@ def morph_epw_cordex(*,
                      fwg_params: Optional[Dict[str, Any]] = None,
                      # --- Explicit Future Weather Generator Arguments ---
                      fwg_rcm_pairs: Optional[List[str]] = None,
-                     fwg_create_ensemble: bool = True,
-                     fwg_winter_sd_shift: float = 0.0,
-                     fwg_summer_sd_shift: float = 0.0,
-                     fwg_month_transition_hours: int = 72,
-                     fwg_use_multithreading: bool = True,
-                     fwg_interpolation_method_id: Union[int, str] = 0,
-                     fwg_limit_variables: bool = True,
-                     fwg_output_type: str = 'EPW',
+                     fwg_create_ensemble: Optional[bool] = None,
+                     fwg_winter_sd_shift: Optional[float] = None,
+                     fwg_summer_sd_shift: Optional[float] = None,
+                     fwg_month_transition_hours: Optional[int] = None,
+                     fwg_use_multithreading: Optional[bool] = None,
+                     fwg_interpolation_method_id: Optional[Union[int, str]] = None,
+                     fwg_limit_variables: Optional[bool] = None,
+                     fwg_output_type: Optional[str] = None,
                      fwg_version: Optional[Union[str, int]] = None,
                      fwg_scenarios: Optional[List[str]] = None,
                      fwg_timeframes: Optional[List[Union[int, str]]] = None,
@@ -768,7 +777,10 @@ def morph_epw_cordex(*,
         fwg_show_tool_output (bool, optional): If True, prints the FWG tool's
             console output in real-time. Defaults to False.
         fwg_params (Optional[Dict[str, Any]], optional): A dictionary for base
-            FWG parameters. Any explicit `fwg_` argument will override this.
+            FWG parameters, with keys without the 'fwg_' prefix. Any explicit
+            `fwg_` argument that is passed will override this. The explicit
+            `fwg_` arguments default to None, which uses the value of
+            `fwg_params` or, if it is not set there, the default of pyfwg.
             Defaults to None.
         fwg_rcm_pairs (Optional[List[str]], optional): List of GCM-RCM pairs
             of the region. If None, the tool uses all of them.
@@ -782,7 +794,7 @@ def morph_epw_cordex(*,
     Raises:
         ValueError: If the provided FWG parameters fail validation.
     """
-    logging.info("--- Starting CORDEX Regional Direct Morphing Process ---")
+    logger.info("--- Starting CORDEX Regional Direct Morphing Process ---")
 
     # Instantiate the corresponding workflow class to use as an internal engine.
     workflow = MorphingWorkflowCordex()
@@ -833,5 +845,5 @@ def morph_epw_cordex(*,
     # Run the workflow and move the generated files without renaming them.
     final_file_paths = _run_direct_morphing(workflow, output_dir)
 
-    logging.info(f"CORDEX regional morphing complete. {len(final_file_paths)} files created in {os.path.abspath(output_dir)}")
+    logger.info(f"CORDEX regional morphing complete. {len(final_file_paths)} files created in {os.path.abspath(output_dir)}")
     return final_file_paths

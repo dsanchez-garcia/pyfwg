@@ -462,6 +462,33 @@ def test_cordex_rejects_global_jar(temp_epw, tmp_path):
     assert not wf.is_config_valid
 
 
+@pytest.mark.parametrize("jar", ["FutureWeatherGenerator_Europe_v2.0.2.jar", "FutureWeatherGenerator_Europe_v1.0.1.jar"])
+def test_cordex_rejects_europe_jars_before_the_engine(temp_epw, tmp_path, caplog, jar):
+    """
+    Europe v1.x and v2.x do not run on the FWG Engine, so MorphingWorkflowCordex
+    (which builds the FWG Engine command) rejects them. Europe v3+ is accepted.
+    """
+    with caplog.at_level(logging.ERROR, logger="pyfwg"):
+        wf = configure(MorphingWorkflowCordex, temp_epw, str(tmp_path / "out"), fwg_jar_path=jar)
+    assert not wf.is_config_valid
+    assert "Use MorphingWorkflowEurope instead" in caplog.text
+
+    wf = configure(MorphingWorkflowCordex, temp_epw, str(tmp_path / "out"), fwg_jar_path=EUROPE_V3_JAR)
+    assert wf.is_config_valid
+
+
+def test_cordex_uses_fwg_params(temp_epw, tmp_path):
+    """The values of fwg_params apply to the parameters that are not passed explicitly."""
+    wf = configure(MorphingWorkflowCordex, temp_epw, str(tmp_path / "out"), fwg_jar_path=NAM_JAR,
+                   fwg_params={"month_transition_hours": 24, "create_ensemble": False, "diffuse_irradiation_model": 2})
+    assert wf.is_config_valid
+    cmd = wf._build_command_engine(temp_epw, "temp.epw", "out")
+    assert "-smooth_hours=24" in cmd
+    assert "-ensemble=false" in cmd
+    # The legacy diffuse model is translated into the decomposition method
+    assert "-decomposition_method=PAULESCU_BLAGA_2019" in cmd
+
+
 # --- High-level API ---
 
 @patch("pyfwg.api.MorphingWorkflowCordex")
@@ -526,12 +553,14 @@ def test_run_direct_morphing_engine(temp_epw, tmp_path):
 
 # --- Iterator and utilities ---
 
-def test_iterator_cordex_ignores_uhi_defaults():
+def test_iterator_cordex_ignores_uhi_defaults(caplog):
     """Arguments that a workflow does not accept (e.g., UHI for CORDEX) are ignored with a warning."""
     iterator = MorphingIterator(MorphingWorkflowCordex)
-    with patch("logging.warning") as mock_warn:
+    with caplog.at_level(logging.WARNING, logger="pyfwg"):
         iterator.set_default_values(fwg_jar_path=NAM_JAR, fwg_add_uhi=True, fwg_scenarios=["rcp85"])
-        mock_warn.assert_called_once()
+    warnings = [record for record in caplog.records if record.levelno == logging.WARNING]
+    assert len(warnings) == 1
+    assert "fwg_add_uhi" in warnings[0].getMessage()
     assert "fwg_add_uhi" not in iterator.custom_defaults
     assert iterator.custom_defaults["fwg_scenarios"] == ["rcp85"]
     # The template only contains the arguments of the CORDEX workflow

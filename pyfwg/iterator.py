@@ -1,4 +1,5 @@
 # pyfwg/iterator.py
+import os
 import re
 
 import pandas as pd
@@ -8,7 +9,25 @@ from typing import Type, List, Dict, Any, Union, Optional
 
 # Import the base class to use its type hint
 from .workflow import _MorphingWorkflowBase
-from .constants import ALL_POSSIBLE_YEARS
+
+logger = logging.getLogger(__name__)
+
+# Marker that represents a missing value when comparing the values of a column.
+_MISSING = object()
+
+
+def _is_missing(value: Any) -> bool:
+    """(Private) Returns True for None and NaN-like scalars. Lists, dicts and other containers are never missing."""
+    return value is None or (pd.api.types.is_scalar(value) and bool(pd.isna(value)))
+
+
+def _comparable(value: Any) -> Any:
+    """(Private) Returns a hashable version of a cell value (lists become tuples) to count distinct values."""
+    if isinstance(value, (list, tuple)):
+        return tuple(_comparable(item) for item in value)
+    if _is_missing(value):
+        return _MISSING
+    return value
 
 class MorphingIterator:
     """Automates running multiple morphing configurations from a structured input.
@@ -39,8 +58,8 @@ class MorphingIterator:
             rows for each run.
             ```python
             runs_df = iterator.get_template_dataframe()
-            runs_df.loc = {'epw_paths': 'file1.epw', 'fwg_gcms': ['CanESM5']}
-            runs_df.loc = {'epw_paths': 'file2.epw', 'fwg_gcms': ['MIROC6']}
+            runs_df.loc[len(runs_df)] = {'epw_paths': 'file1.epw', 'fwg_gcms': ['CanESM5']}
+            runs_df.loc[len(runs_df)] = {'epw_paths': 'file2.epw', 'fwg_gcms': ['MIROC6']}
             ```
 
         *   **B) Using an Excel Template:**
@@ -86,7 +105,7 @@ class MorphingIterator:
         self.custom_defaults: Dict[str, Any] = {}
         self.prepared_workflows: List[_MorphingWorkflowBase] = []
         self.morphing_workflows_plan_df: Optional[pd.DataFrame] = None
-        logging.info(f"MorphingIterator initialized for {workflow_class.__name__}.")
+        logger.info(f"MorphingIterator initialized for {workflow_class.__name__}.")
 
     def set_default_values(self, *,
                            # --- All possible workflow and FWG arguments are listed here ---
@@ -184,14 +203,14 @@ class MorphingIterator:
         # (e.g., 'fwg_rcm_pairs' for MorphingWorkflowGlobal) are ignored.
         accepted_args = inspect.signature(self.workflow_class.configure_and_preview).parameters
         for inapplicable_arg in [key for key in self.custom_defaults if key not in accepted_args]:
-            logging.warning(
+            logger.warning(
                 f"Argument '{inapplicable_arg}' is not applicable for "
                 f"{self.workflow_class.__name__} and will be ignored."
             )
             # Remove the inapplicable argument so it's not used later.
             self.custom_defaults.pop(inapplicable_arg)
 
-        logging.info(f"Custom default values have been set for the iterator: {self.custom_defaults}")
+        logger.info(f"Custom default values have been set for the iterator: {self.custom_defaults}")
 
     def get_template_dataframe(self) -> pd.DataFrame:
         """Generates an empty Pandas DataFrame with the correct parameter columns.
@@ -294,9 +313,10 @@ class MorphingIterator:
                 if default_val is not None:
                     # Use the robust .apply() method to fill only the NaN values.
                     # This is safer than .fillna() for DataFrames with mixed
-                    # data types (like lists) and avoids FutureWarning.
+                    # data types (like lists) and avoids FutureWarning. Cells with
+                    # lists or dicts are never considered missing.
                     completed_df[col] = completed_df[col].apply(
-                        lambda x: default_val if pd.isnull(x) else x
+                        lambda x: default_val if _is_missing(x) else x
                     )
 
         # Return the fully populated DataFrame.
@@ -320,15 +340,22 @@ class MorphingIterator:
             each run to extract categories from the EPW filenames.
         3.  **Enriches the Plan**: It adds new columns (`cat_*`) to the plan
             DataFrame, showing the extracted categories for each run.
-        4.  **Validates for Filename Overwrites**: It performs two layers of
-            validation to prevent data loss: first by checking for varying
-            parameters, and then by simulating all final filenames to detect
-            any direct collisions.
-        5.  **Stores the Plan**: The final, validated DataFrame is stored in
-            `self.morphing_workflows_plan_df` for user inspection.
-        6.  **Prepares Workflows**: It instantiates and fully configures a
-            `MorphingWorkflow` object for each run in the plan. These
-            ready-to-run instances are stored in `self.prepared_workflows`.
+        4.  **Prepares Workflows**: It instantiates and fully configures a
+            `MorphingWorkflow` object for each run in the plan.
+        5.  **Validates for Filename Overwrites**: It performs two layers of
+            validation to prevent data loss: first by checking for parameters
+            that vary between runs but are not in their output filename
+            pattern, and then by comparing the final paths of all the files
+            that the prepared workflows will write (output folder and filename
+            of each input file, scenario and year) to detect any direct
+            collision.
+        6.  **Stores the Plan**: The final, validated DataFrame is stored in
+            `self.morphing_workflows_plan_df` for user inspection, and the
+            ready-to-run workflow instances in `self.prepared_workflows`.
+
+        Parameters that a run does not set (empty cells, and no value in
+        `set_default_values`) are not passed to its workflow, so the values of
+        its `fwg_params` or the defaults of the workflow apply.
 
         Args:
             runs_df (pd.DataFrame): The user's DataFrame of runs. Each row
@@ -341,13 +368,19 @@ class MorphingIterator:
                 unless overridden in the DataFrame.
             raise_on_overwrite (bool, optional): If True (default), raises a
                 ValueError if a definitive filename overwrite is detected in
-                Layer 2 validation. Layer 1 validation will always only warn.
+                Layer 2 validation, and no workflows are prepared. Layer 1
+                validation will always only warn.
 
         Raises:
             ValueError: If `raise_on_overwrite` is True and a definitive file
                 overwrite is detected.
         """
-        logging.info("Generating detailed execution plan and preparing workflows...")
+        logger.info("Generating detailed execution plan and preparing workflows...")
+
+        # Discard the results of any previous call, so that a failed call does not
+        # leave workflows ready to run.
+        self.prepared_workflows = []
+        self.morphing_workflows_plan_df = None
 
         # --- Part 1: Generate the Detailed DataFrame Plan ---
 
@@ -373,8 +406,8 @@ class MorphingIterator:
             epw_files = [epw_paths] if isinstance(epw_paths, str) else epw_paths
 
             # Determine the mapping strategy for this specific run.
-            run_input_pattern = row.get('input_filename_pattern') if pd.notnull(row.get('input_filename_pattern')) else input_filename_pattern
-            run_keyword_map = row.get('keyword_mapping') if pd.notnull(row.get('keyword_mapping')) else keyword_mapping
+            run_input_pattern = row.get('input_filename_pattern') if not _is_missing(row.get('input_filename_pattern')) else input_filename_pattern
+            run_keyword_map = row.get('keyword_mapping') if not _is_missing(row.get('keyword_mapping')) else keyword_mapping
 
             # Create a temporary workflow instance just for mapping.
             temp_workflow = self.workflow_class()
@@ -415,130 +448,67 @@ class MorphingIterator:
         plan_df = plan_df.reindex(columns=final_cols_order)
 
         # --- Part 2: Validate for potential filename overwrites ---
-        logging.info("Validating for potential filename overwrites...")
+        logger.info("Validating for potential filename overwrites...")
 
         # Initialize a flag to track if any overwrite issues were detected.
         # This ensures the final log message is accurate.
         overwrite_detected = False
 
-        # Get the output pattern from the plan (it should be the same for all runs).
-        output_pattern = plan_df['output_filename_pattern'].iloc[0]
-
-        # Find all placeholders the user has included in their pattern.
-        pattern_placeholders = set(re.findall(r'{(.*?)}', output_pattern))
+        # Find the placeholders of the output pattern of each run (each run can have its own).
+        if 'output_filename_pattern' in plan_df.columns:
+            run_patterns = [pattern if isinstance(pattern, str) else '' for pattern in plan_df['output_filename_pattern']]
+        else:
+            run_patterns = [''] * len(plan_df)
+        placeholders_per_run = [set(re.findall(r'{(.*?)}', pattern)) for pattern in run_patterns]
 
         # --- Validation Layer 1: Proactive check for varying parameters ---
         varying_columns = []
         # These columns are expected to be different per run but don't need to be in the filename pattern.
         # The selected scenarios and periods are already covered by the scenario and {year} placeholders.
         ignore_cols = ['epw_paths', 'final_output_dir', 'input_filename_pattern', 'keyword_mapping',
-                       'fwg_scenarios', 'fwg_timeframes', 'fwg_model_unzipped_folder']
+                       'output_filename_pattern', 'fwg_scenarios', 'fwg_timeframes', 'fwg_model_unzipped_folder']
 
         for col in plan_df.columns:
             if col in ignore_cols:
                 continue
 
             try:
-                # Use a robust method to check for uniqueness, handling lists.
-                if isinstance(plan_df[col].dropna().iloc[0], list):
-                    unique_count = plan_df[col].dropna().apply(lambda x: tuple(x) if isinstance(x, list) else x).nunique()
-                else:
-                    unique_count = plan_df[col].nunique()
-
-                if unique_count > 1:
-                    varying_columns.append(col)
-            except (TypeError, IndexError):
-                # This can happen with mixed types or empty columns, which we can ignore.
+                # Lists are compared as tuples, and a missing value (i.e., the default of the
+                # workflow) counts as one more value.
+                unique_count = len({_comparable(value) for value in plan_df[col]})
+            except TypeError:
+                # Unhashable values (e.g., dictionaries) are not compared.
                 continue
+
+            if unique_count > 1:
+                varying_columns.append(col)
 
         # Convert column names to placeholder names (e.g., 'cat_uhi' -> 'uhi').
         varying_placeholders = {col.replace('cat_', '') for col in varying_columns}
 
-        # Check if any varying parameter or category is missing from the filename pattern.
-        missing_placeholders = varying_placeholders - pattern_placeholders
+        # Check if any varying parameter or category is missing from the filename pattern of any run.
+        missing_placeholders = sorted(
+            placeholder for placeholder in varying_placeholders
+            if any(placeholder not in run_placeholders for run_placeholders in placeholders_per_run)
+        )
         if missing_placeholders:
             # Construct the message first.
             message = (
                 f"Potential file overwrite detected! The following parameters or categories vary "
                 f"between runs but are not included as placeholders in the 'output_filename_pattern': "
-                f"{list(missing_placeholders)}. Please add them to the pattern to ensure unique filenames."
+                f"{missing_placeholders}. Please add them to the pattern to ensure unique filenames."
             )
             # This layer ONLY warns, it never raises an error.
-            logging.warning(message)
-            # logging.warning("Execution will continue, but output files may be overwritten.")
+            logger.warning(message)
             overwrite_detected = True
 
-        # --- Validation Layer 2: Definitive simulation of all filenames ---
-        # This set tracks all filenames generated so far to detect collisions.
-        generated_filenames = set()
-        # This set will collect ONLY the filenames that cause a collision.
-        colliding_filenames = set()
+        # --- Part 3: Prepare the workflows ---
+        logger.info(f"Preparing {len(plan_df)} workflow instances...")
+        prepared_runs = []
 
-        for index, row in plan_df.iterrows():
-            # Create a dictionary of all available placeholders for this run.
-            # The keys in the row already have the correct 'fwg_' prefix.
-            fwg_placeholders = {key: value for key, value in row.items() if key.startswith('fwg_')}
-            cat_placeholders = {key.replace('cat_', ''): value[0] if isinstance(value, list) and len(value) == 1 else value for key, value in row.items() if key.startswith('cat_')}
-
-            # Safely get the scenario_mapping dictionary for the current row.
-            scenario_map = row.get('scenario_mapping')
-            if not isinstance(scenario_map, dict):
-                scenario_map = {}
-
-            # Simulate the filename generation for every possible climate scenario and year.
-            for year in ALL_POSSIBLE_YEARS:
-                for scenario in self.workflow_class.tool_scenarios:
-                    filename_data = {**cat_placeholders, **fwg_placeholders, 'year': year, self.workflow_class.scenario_placeholder_name: scenario_map.get(scenario, scenario)}
-
-                    try:
-                        # Generate the final filename.
-                        final_filename = output_pattern.format(**filename_data)
-
-                        # Check if the filename has been seen before.
-                        if final_filename in generated_filenames:
-                            # It's a collision. Add it to the collection of colliding names.
-                            colliding_filenames.add(final_filename)
-                        else:
-                            # It's unique so far. Add it to the set of seen names.
-                            generated_filenames.add(final_filename)
-
-                    except KeyError as e:
-                        logging.warning(f"Could not generate filename for run {index + 1} due to missing key: {e}")
-                        break
-
-        # After checking ALL files, report if any collisions were found.
-        if colliding_filenames:
-            # Build a user-friendly error message listing ALL collisions.
-            sorted_collisions = sorted(list(colliding_filenames))
-            message = (
-                    f"Definitive file overwrite(s) detected! The following {len(sorted_collisions)} filename(s) are generated by more than one run:\n"
-                    + "\n".join(f"- {fname}.epw" for fname in sorted_collisions)
-                    + "\n\nPlease review your `output_filename_pattern` and `keyword_mapping` to ensure unique filenames."
-            )
-
-            # For definitive collisions, we respect the raise_on_overwrite flag.
-            if raise_on_overwrite:
-                raise ValueError(message)
-            else:
-                logging.warning(message)
-                logging.warning("Execution will continue, but output files will be overwritten.")
-                overwrite_detected = True
-
-        # Log the final result of the validation.
-        if not overwrite_detected:
-            logging.info("Filename validation passed. No overwrites detected.")
-        else:
-            logging.info("Filename validation complete. Potential overwrites were detected (see warnings above).")
-
-        # --- Part 3: Store the plan and prepare workflows ---
-        self.morphing_workflows_plan_df = plan_df
-
-        logging.info(f"Preparing {len(plan_df)} workflow instances...")
-        self.prepared_workflows = []
-
-        # Iterate through the now-validated plan DataFrame.
-        for index, row in plan_df.iterrows():
-            # The row now contains all defaults, so dropna is safe.
+        for run_number, (index, row) in enumerate(plan_df.iterrows(), start=1):
+            # Missing values are not passed, so the workflow uses the values of
+            # 'fwg_params' or its own defaults for them.
             run_params = row.dropna().to_dict()
 
             # Extract parameters that are for the iterator, not the workflow config.
@@ -562,11 +532,55 @@ class MorphingIterator:
                 )
                 workflow.configure_and_preview(**run_params)
                 # Add the fully configured instance to the list for later execution.
-                self.prepared_workflows.append(workflow)
+                prepared_runs.append((run_number, workflow))
             except Exception as e:
-                logging.error(f"Failed to prepare workflow for run {index + 1}: {e}")
+                logger.error(f"Failed to prepare workflow for run {run_number}: {e}")
 
-        logging.info(f"Execution plan generated and {len(self.prepared_workflows)} workflows prepared.")
+        # --- Validation Layer 2: Definitive check of the final paths of all files ---
+        # The rename plan of each workflow contains the final path of every file that it
+        # will write (one per input file, scenario and year), built with the output
+        # folder, filename pattern, categories and parameters of its own run.
+        destinations = {}
+        for run_number, workflow in prepared_runs:
+            for epw_path in workflow.epws_to_be_morphed:
+                for final_path in workflow.rename_plan.get(epw_path, {}).values():
+                    # The weather and .stat files share the path without extension. Paths are
+                    # compared as absolute paths (case-insensitively on Windows).
+                    base_path = os.path.abspath(os.path.splitext(final_path)[0])
+                    entry = destinations.setdefault(os.path.normcase(base_path), {'path': base_path, 'writers': []})
+                    entry['writers'].append(f"run {run_number} ({os.path.basename(epw_path)})")
+
+        colliding_paths = sorted(
+            (entry for entry in destinations.values() if len(entry['writers']) > 1), key=lambda entry: entry['path'])
+        if colliding_paths:
+            # Build a user-friendly error message listing ALL collisions.
+            message = (
+                    f"Definitive file overwrite(s) detected! The following {len(colliding_paths)} output file(s) "
+                    f"(weather and .stat files, shown without extension) would be written more than once:\n"
+                    + "\n".join(f"- {entry['path']}: {', '.join(entry['writers'])}" for entry in colliding_paths)
+                    + "\n\nPlease review your `output_filename_pattern`, `final_output_dir` and `keyword_mapping` "
+                      "to ensure unique filenames."
+            )
+
+            # For definitive collisions, we respect the raise_on_overwrite flag.
+            if raise_on_overwrite:
+                raise ValueError(message)
+            else:
+                logger.warning(message)
+                logger.warning("Execution will continue, but output files will be overwritten.")
+                overwrite_detected = True
+
+        # Log the final result of the validation.
+        if not overwrite_detected:
+            logger.info("Filename validation passed. No overwrites detected.")
+        else:
+            logger.info("Filename validation complete. Potential overwrites were detected (see warnings above).")
+
+        # --- Part 4: Store the plan and the prepared workflows ---
+        self.morphing_workflows_plan_df = plan_df
+        self.prepared_workflows = [workflow for _, workflow in prepared_runs]
+
+        logger.info(f"Execution plan generated and {len(self.prepared_workflows)} workflows prepared.")
 
     def run_morphing_workflows(self, show_tool_output: Optional[bool] = None):
         """
@@ -600,11 +614,11 @@ class MorphingIterator:
         if not self.prepared_workflows:
             raise RuntimeError("No workflows have been prepared. Please run generate_morphing_workflows() first.")
 
-        logging.info(f"Starting execution of {len(self.prepared_workflows)} prepared runs...")
+        logger.info(f"Starting execution of {len(self.prepared_workflows)} prepared runs...")
 
         # Iterate through the list of fully configured workflow instances.
         for i, workflow in enumerate(self.prepared_workflows):
-            logging.info(f"--- Running Run {i + 1}/{len(self.prepared_workflows)} ---")
+            logger.info(f"--- Running Run {i + 1}/{len(self.prepared_workflows)} ---")
             try:
                 # --- Override Logic for Tool Output ---
                 # If the user provides a value for show_tool_output when calling
@@ -621,14 +635,14 @@ class MorphingIterator:
                 else:
                     # If the configuration was found to be invalid during preparation,
                     # log an error and skip this run.
-                    logging.error(f"Run {i + 1} skipped due to invalid configuration detected during preparation.")
+                    logger.error(f"Run {i + 1} skipped due to invalid configuration detected during preparation.")
 
             except Exception as e:
                 # If any unexpected error occurs during a single run, log it
                 # and continue with the next run in the batch. This makes the
                 # iterator robust to single-run failures.
-                logging.error(f"An unexpected error occurred in run {i + 1}: {e}")
-                logging.error("Moving to the next run.")
+                logger.error(f"An unexpected error occurred in run {i + 1}: {e}")
+                logger.error("Moving to the next run.")
                 continue
 
-        logging.info("Batch run complete.")
+        logger.info("Batch run complete.")

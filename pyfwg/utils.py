@@ -4,6 +4,8 @@ import os
 import sys
 import copy
 import json
+import math
+import numbers
 import shutil
 import logging
 import subprocess
@@ -14,6 +16,7 @@ import zipfile
 from functools import lru_cache
 from typing import List, Union, Dict, Optional, Any
 import ast
+import numpy as np
 import pandas as pd
 from datetime import datetime
 
@@ -29,6 +32,8 @@ from .constants import (
     ENGINE_MORPHING_METHODS, ENGINE_UNCERTAINTY_VARIANTS,
     ENGINE_OUTPUT_PROFILES
 )
+
+logger = logging.getLogger(__name__)
 
 # Locations of the metadata packaged inside FWG Engine JARs.
 _ENGINE_RESOURCES_DIR = 'futureweathergenerator/resources/'
@@ -70,13 +75,13 @@ def copy_tutorials(dest_dir: str = './pyfwg_tutorials'):
         # way to access package data.
         source_path_obj = resources.files(source_package)
     except (ModuleNotFoundError, AttributeError):
-        logging.error(f"Could not find the tutorials sub-package '{source_package}'. The package might be corrupted.")
+        logger.error(f"Could not find the tutorials sub-package '{source_package}'. The package might be corrupted.")
         return
 
     # Create the destination directory if it doesn't already exist.
     os.makedirs(dest_dir, exist_ok=True)
 
-    logging.info(f"Copying tutorials to '{os.path.abspath(dest_dir)}'...")
+    logger.info(f"Copying tutorials to '{os.path.abspath(dest_dir)}'...")
 
     # --- Define patterns to ignore during the copy process ---
     # This uses a helper from shutil to create an ignore function that
@@ -109,13 +114,13 @@ def copy_tutorials(dest_dir: str = './pyfwg_tutorials'):
                     dirs_exist_ok=True,
                     ignore=ignore_patterns
                 )
-                logging.info(f"  - Copied directory: {item_name}")
+                logger.info(f"  - Copied directory: {item_name}")
             else:
                 # If the item is a file, copy it directly.
                 shutil.copy2(source_item_path, dest_path)
-                logging.info(f"  - Copied file: {item_name}")
+                logger.info(f"  - Copied file: {item_name}")
 
-    logging.info("Tutorials copied successfully.")
+    logger.info("Tutorials copied successfully.")
 
 def _robust_rmtree(path: str, max_retries: int = 5, delay: float = 0.5):
     """(Private) A robust version of shutil.rmtree that retries on PermissionError.
@@ -139,10 +144,10 @@ def _robust_rmtree(path: str, max_retries: int = 5, delay: float = 0.5):
             return
         except PermissionError:
             # If a PermissionError occurs, log a warning and wait before retrying.
-            logging.warning(f"PermissionError deleting {path}. Retrying in {delay}s... (Attempt {i + 1}/{max_retries})")
+            logger.warning(f"PermissionError deleting {path}. Retrying in {delay}s... (Attempt {i + 1}/{max_retries})")
             time.sleep(delay)
     # If all retries fail, log a final error.
-    logging.error(f"Failed to delete directory {path} after {max_retries} retries.")
+    logger.error(f"Failed to delete directory {path} after {max_retries} retries.")
 
 
 def _parse_java_properties(text: str) -> Dict[str, str]:
@@ -163,6 +168,83 @@ def _parse_java_properties(text: str) -> Dict[str, str]:
 def _normalize_scenario_id(value: Any) -> str:
     """(Private) Normalizes a scenario name for comparison (e.g., 'SSP2-4.5' -> 'ssp245')."""
     return re.sub(r'[^a-z0-9]', '', str(value).lower())
+
+
+def _to_bool(value: Any, name: str = 'value') -> bool:
+    """(Private) Converts a flag strictly into a boolean.
+
+    Accepts booleans (also NumPy's), the numbers 0 and 1 (e.g., 1.0 read from
+    Excel) and the strings 'true', 'false', '1' and '0' in any case.
+
+    Args:
+        value (Any): The value to convert.
+        name (str, optional): Name of the argument, used in the error message.
+
+    Raises:
+        ValueError: For any other value (e.g., 2, 'yes' or None).
+    """
+    if isinstance(value, (bool, np.bool_)):
+        return bool(value)
+    if isinstance(value, numbers.Real) and value in (0, 1):
+        return bool(value)
+    if isinstance(value, str):
+        text = value.strip().lower()
+        if text in ('true', '1'):
+            return True
+        if text in ('false', '0'):
+            return False
+    raise ValueError(f"'{name}' must be True or False, but got {value!r}.")
+
+
+def _as_integer(value: Any) -> Optional[int]:
+    """(Private) Returns the integer value of an integer, of a float without decimals
+    (e.g., 14.0, as pandas reads integer columns with gaps) or of a numeric string.
+
+    Returns None for any other value, including booleans and floats with decimals (e.g., 14.5).
+    """
+    if isinstance(value, (bool, np.bool_)):
+        return None
+    if isinstance(value, numbers.Integral):
+        return int(value)
+    if isinstance(value, numbers.Real):
+        value = float(value)
+        return int(value) if value.is_integer() else None
+    if isinstance(value, str):
+        text = value.strip()
+        try:
+            return int(text)
+        except ValueError:
+            try:
+                number = float(text)
+            except ValueError:
+                return None
+            return int(number) if number.is_integer() else None
+    return None
+
+
+def _as_number(value: Any) -> Optional[Union[int, float]]:
+    """(Private) Returns a finite number as a Python int or float (also from NumPy numbers
+    or numeric strings), keeping integers as integers. Returns None for any other value.
+    """
+    if isinstance(value, (bool, np.bool_)):
+        return None
+    if isinstance(value, numbers.Integral):
+        return int(value)
+    if isinstance(value, numbers.Real):
+        value = float(value)
+        return value if math.isfinite(value) else None
+    if isinstance(value, str):
+        text = value.strip()
+        try:
+            return int(text)
+        except ValueError:
+            pass
+        try:
+            number = float(text)
+        except ValueError:
+            return None
+        return number if math.isfinite(number) else None
+    return None
 
 
 @lru_cache(maxsize=16)
@@ -228,7 +310,7 @@ def _read_distribution_info(jar_path: str, mtime_ns: int, size: int) -> Optional
                     jar.read(_ENGINE_VERSION_PROPERTIES).decode('utf-8', errors='replace'))
                 engine_version = properties.get('version')
     except (OSError, zipfile.BadZipFile, ValueError, KeyError, TypeError, AttributeError) as e:
-        logging.debug(f"Could not read FWG distribution metadata from '{jar_path}': {e}")
+        logger.debug(f"Could not read FWG distribution metadata from '{jar_path}': {e}")
         return None
 
     # Classify the distribution into the tool families handled by pyfwg.
@@ -502,53 +584,60 @@ def uhi_morph(*,
             exception if the external tool fails. If False, it will log the
             error but not stop the program, allowing the calling function to
             handle the failure. Defaults to True.
-        fwg_version (Optional[Union[str, int]], optional): Explicitly provide 
+        fwg_version (Optional[Union[str, int]], optional): Explicitly provide
             the FWG version. If None, it will be auto-detected.
+
+    Returns:
+        bool: True if the UHI effect was applied. False if it could not be
+        applied and `raise_on_error` is False.
 
     Raises:
         FileNotFoundError: If the 'java' command is not found and `raise_on_error` is True.
         subprocess.CalledProcessError: If the FWG tool returns a non-zero exit code
             and `raise_on_error` is True.
-        ValueError: If the version cannot be detected or the JAR is an FWG Engine
-            distribution (without UHI support), and `raise_on_error` is True.
+        subprocess.TimeoutExpired: If the FWG tool does not finish in time and
+            `raise_on_error` is True.
+        ValueError: If the version cannot be detected, the JAR is an FWG Engine
+            distribution (without UHI support) or the LCZs are not integers, and
+            `raise_on_error` is True.
     """
-    logging.info(f"--- Applying UHI effect to {os.path.basename(fwg_epw_path)} ---")
+    logger.info(f"--- Applying UHI effect to {os.path.basename(fwg_epw_path)} ---")
 
-    # --- 0. Resolve FWG Version ---
-    if fwg_version is None:
-        try:
-            version_str = detect_fwg_version(fwg_jar_path)
-        except ValueError as e:
-            if raise_on_error:
-                raise e
+    try:
+        # --- 0. Resolve FWG Version ---
+        version_str = detect_fwg_version(fwg_jar_path) if fwg_version is None else str(fwg_version)
+
+        # --- 1. Auto-detect Class Path Prefix ---
+        if java_class_path_prefix is None:
+            if 'europe' in os.path.basename(fwg_jar_path).lower():
+                java_class_path_prefix = 'futureweathergenerator_europe'
             else:
-                logging.error(f"Version detection failed: {e}")
-                return # Cannot proceed
-    else:
-        version_str = str(fwg_version)
+                java_class_path_prefix = 'futureweathergenerator'
 
-    # --- 1. Auto-detect Class Path Prefix ---
-    if java_class_path_prefix is None:
-        if 'europe' in os.path.basename(fwg_jar_path).lower():
-            java_class_path_prefix = 'futureweathergenerator_europe'
-        else:
-            java_class_path_prefix = 'futureweathergenerator'
+        is_europe = 'europe' in java_class_path_prefix.lower()
+        detected_tool = detect_fwg_tool(fwg_jar_path)
+        tool = detected_tool if detected_tool in ('europe', 'cordex') else ('europe' if is_europe else 'global')
+        cli_style = get_fwg_cli_style(version_str, tool)
 
-    is_europe = 'europe' in java_class_path_prefix.lower()
-    detected_tool = detect_fwg_tool(fwg_jar_path)
-    tool = detected_tool if detected_tool in ('europe', 'cordex') else ('europe' if is_europe else 'global')
-    cli_style = get_fwg_cli_style(version_str, tool)
+        if cli_style == FWG_CLI_ENGINE:
+            raise ValueError(
+                f"UHI morphing is not available in '{os.path.basename(fwg_jar_path)}'. The FWG Engine distributions "
+                "(Global v5+, Europe v3+ and CORDEX regional) do not support the Urban Heat Island effect. "
+                "Use FWG Global v4.x/v3.x or Europe v2.x/v1.x to apply it."
+            )
 
-    if cli_style == FWG_CLI_ENGINE:
-        message = (
-            f"UHI morphing is not available in '{os.path.basename(fwg_jar_path)}'. The FWG Engine distributions "
-            "(Global v5+, Europe v3+ and CORDEX regional) do not support the Urban Heat Island effect. "
-            "Use FWG Global v4.x/v3.x or Europe v2.x/v1.x to apply it."
-        )
+        # The tool expects integer LCZs (e.g., 14.0, as read from Excel, is passed as 14).
+        original_lcz = _as_integer(fwg_original_lcz)
+        target_lcz = _as_integer(fwg_target_lcz)
+        if original_lcz is None or target_lcz is None:
+            raise ValueError(
+                f"The LCZs must be integers, but got {fwg_original_lcz!r} (original) and {fwg_target_lcz!r} (target).")
+        limit_variables = _to_bool(fwg_limit_variables, 'fwg_limit_variables')
+    except ValueError as e:
         if raise_on_error:
-            raise ValueError(message)
-        logging.error(message)
-        return
+            raise
+        logger.error(f"UHI morphing could not be started: {e}")
+        return False
 
     # Ensure the output directory exists before running the tool.
     os.makedirs(fwg_output_dir, exist_ok=True)
@@ -567,7 +656,7 @@ def uhi_morph(*,
             # Note: The tool typically expects output_folder to end with slash
             f'-output_folder={os.path.abspath(fwg_output_dir)}{os.sep}',
             # UHI flag: -uhi=true:orig:target
-            f'-uhi=true:{fwg_original_lcz}:{fwg_target_lcz}',
+            f'-uhi=true:{original_lcz}:{target_lcz}',
             # Explicitly request EPW output if needed
             f'-output_type=EPW'
         ]
@@ -578,7 +667,7 @@ def uhi_morph(*,
     else:
         # --- Legacy (v3.x / Europe v1.x) Logic ---
         # Create the composite LCZ argument string (e.g., "14:2").
-        lcz_options = f"{fwg_original_lcz}:{fwg_target_lcz}"
+        lcz_options = f"{original_lcz}:{target_lcz}"
 
         # Dynamically build the full Java class path using the provided prefix.
         class_path = f"{java_class_path_prefix}.UHI_Morph"
@@ -588,13 +677,13 @@ def uhi_morph(*,
             'java', '-cp', fwg_jar_path, class_path,
             os.path.abspath(fwg_epw_path),
             os.path.abspath(fwg_output_dir) + '/',
-            str(fwg_limit_variables).lower(),
+            str(limit_variables).lower(),
             lcz_options
         ]
 
     # Create a user-friendly, copy-pasteable version of the command for logging.
     printable_command = ' '.join(f'"{arg}"' if ' ' in arg else arg for arg in command)
-    logging.info(f"Executing command: {printable_command}")
+    logger.info(f"Executing command: {printable_command}")
 
     # --- 2. Subprocess Execution ---
     # Determine whether to show the tool's output live or capture it.
@@ -605,27 +694,28 @@ def uhi_morph(*,
         # Run the command. The `check=True` flag will cause it to raise
         # CalledProcessError if the Java program returns a non-zero exit code.
         subprocess.run(command, text=True, check=True, timeout=300, stdout=stdout_dest, stderr=stderr_dest)
-        logging.info("UHI effect applied successfully.")
+    except Exception as e:
+        # --- 3. Error Handling ---
+        # The exception is raised unchanged, without logging it, so that callers such as
+        # check_lcz_availability can handle it silently.
+        if raise_on_error:
+            raise
+        # Otherwise, the error is logged and the program continues.
+        if isinstance(e, FileNotFoundError):
+            logger.error("Error: 'java' command not found. Please ensure Java is installed and in the system's PATH.")
+        elif isinstance(e, subprocess.CalledProcessError):
+            logger.error(f"The UHI_Morph tool returned an error (exit code {e.returncode}).")
+            # If output was captured, log it now.
+            if e.stdout: logger.error(f"STDOUT:\n{e.stdout}")
+            if e.stderr: logger.error(f"STDERR:\n{e.stderr}")
+        elif isinstance(e, subprocess.TimeoutExpired):
+            logger.error(f"The UHI_Morph tool did not finish within {e.timeout} seconds.")
+        else:
+            logger.error(f"An unexpected error occurred while applying the UHI effect: {e}")
+        return False
 
-    except (FileNotFoundError, subprocess.CalledProcessError, Exception) as e:
-        raise e
-        # # --- 3. Error Handling ---
-        # # Only raise the exception if the caller wants the program to stop.
-        # # This allows functions like check_lcz_availability to handle the error gracefully.
-        # if raise_on_error:
-        #     # Provide specific logging for different types of errors.
-        #     if isinstance(e, FileNotFoundError):
-        #         logging.error("Error: 'java' command not found. Please ensure Java is installed and in the system's PATH.")
-        #     elif isinstance(e, subprocess.CalledProcessError):
-        #         logging.error("The UHI_Morph tool returned an error.")
-        #         # If output was captured, log it now.
-        #         if e.stdout: logging.error(f"STDOUT:\n{e.stdout}")
-        #         if e.stderr: logging.error(f"STDERR:\n{e.stderr}")
-        #     else:
-        #         logging.error(f"An unexpected error occurred: {e}")
-        #
-        #     # Re-raise the original exception to halt execution.
-        #     raise e
+    logger.info("UHI effect applied successfully.")
+    return True
 
 
 def check_lcz_availability(*,
@@ -668,7 +758,7 @@ def check_lcz_availability(*,
           due to unavailable LCZs.
         - `False` if an unexpected error occurs (e.g., Java not found).
     """
-    logging.info(f"Checking LCZ pair (Original: {original_lcz}, Target: {target_lcz}) availability for {os.path.basename(epw_path)}...")
+    logger.info(f"Checking LCZ pair (Original: {original_lcz}, Target: {target_lcz}) availability for {os.path.basename(epw_path)}...")
 
     # Use a temporary directory that is automatically created and cleaned up,
     # preventing leftover files from the check.
@@ -695,7 +785,7 @@ def check_lcz_availability(*,
                 fwg_version=fwg_version
             )
             # If no exception was raised, the LCZ pair is valid.
-            logging.info(f"LCZ pair (Original: {original_lcz}, Target: {target_lcz}) is available.")
+            logger.info(f"LCZ pair (Original: {original_lcz}, Target: {target_lcz}) is available.")
             return True
 
         except subprocess.CalledProcessError as e:
@@ -752,14 +842,14 @@ def check_lcz_availability(*,
                 return {"invalid_messages": invalid_lczs_messages, "available": available_lczs_full_text}
             else:
                 # If the error was for a different, unexpected reason, report it.
-                logging.error("An unexpected error occurred during LCZ check. Could not parse available LCZs.")
-                logging.error(f"STDERR:\n{e.stderr}")
+                logger.error("An unexpected error occurred during LCZ check. Could not parse available LCZs.")
+                logger.error(f"STDERR:\n{e.stderr}")
                 return False
 
         except Exception as e:
             # Catch any other exceptions (e.g., Java not found, invalid user input,
             # or an FWG Engine JAR, which does not support UHI).
-            logging.error(f"LCZ availability check could not be completed: {e}")
+            logger.error(f"LCZ availability check could not be completed: {e}")
             return False
 
 # def get_available_lczs(*,
@@ -886,7 +976,7 @@ def get_available_lczs(*,
 
     # Determine the number of files for the initial log message.
     num_files = len(epw_paths) if isinstance(epw_paths, list) else 1
-    logging.info(f"--- Fetching available LCZs for {num_files} EPW file(s) ---")
+    logger.info(f"--- Fetching available LCZs for {num_files} EPW file(s) ---")
 
     # Normalize the input to always be a list for consistent processing.
     epw_files = [epw_paths] if isinstance(epw_paths, str) else epw_paths
@@ -926,12 +1016,12 @@ def get_available_lczs(*,
             results[filename] = sorted_lczs
 
             # Print a clear, informative summary for the user.
-            logging.info(f"Available LCZs for '{filename}': {sorted_lczs}")
+            logger.info(f"Available LCZs for '{filename}': {sorted_lczs}")
 
         else:
             # If the check succeeded (shouldn't happen with LCZ 0) or failed
             # unexpectedly, log an error and return an empty list for this file.
-            logging.error(f"Could not retrieve LCZ list for '{filename}'.")
+            logger.error(f"Could not retrieve LCZ list for '{filename}'.")
             results[filename] = []
 
     return results
@@ -949,12 +1039,12 @@ def export_template_to_excel(iterator, file_path: str = 'runs_template.xlsx'):
         file_path (str, optional): The path where the Excel file will be saved.
             Defaults to 'runs_template.xlsx'.
     """
-    logging.info(f"Generating Excel template for {iterator.workflow_class.__name__}...")
+    logger.info(f"Generating Excel template for {iterator.workflow_class.__name__}...")
     template_df = iterator.get_template_dataframe()
 
     # Export to Excel, ensuring the DataFrame index is not written to the file.
     template_df.to_excel(file_path, index=False)
-    logging.info(f"Template successfully exported to '{os.path.abspath(file_path)}'")
+    logger.info(f"Template successfully exported to '{os.path.abspath(file_path)}'")
 
 
 def load_runs_from_excel(file_path: str) -> pd.DataFrame:
@@ -972,7 +1062,7 @@ def load_runs_from_excel(file_path: str) -> pd.DataFrame:
         pd.DataFrame: A DataFrame with the data types corrected and ready for use
         with the MorphingIterator.
     """
-    logging.info(f"Loading runs from '{file_path}'...")
+    logger.info(f"Loading runs from '{file_path}'...")
 
     # Read the Excel file into a DataFrame.
     df = pd.read_excel(file_path)
@@ -991,49 +1081,69 @@ def load_runs_from_excel(file_path: str) -> pd.DataFrame:
             )
 
 
-    logging.info("Runs loaded and data types converted successfully.")
+    logger.info("Runs loaded and data types converted successfully.")
     return df
+
+
+# Number of header lines (LOCATION to DATA PERIODS) before the data records of an EPW file.
+_EPW_HEADER_LINES = 8
 
 
 def sanitize_epw_minutes(epw_path: str):
     """
     Sanitizes an EPW file by replacing minute '60' with '0' in data records.
-    This prevents issues with strict date-time libraries (like java.time) 
+    This prevents issues with strict date-time libraries (like java.time)
     that expect MinuteOfHour to be between 0 and 59.
+
+    The file is processed as bytes, so its encoding (e.g., Latin-1 location
+    names such as 'Málaga') and line endings are preserved. In a standard EPW
+    file, which starts with the LOCATION line, only the data records after
+    the header (the 8 lines from LOCATION to DATA PERIODS) are modified. The
+    file is only rewritten if a record uses minute 60.
 
     Args:
         epw_path (str): The path to the EPW file to sanitize.
     """
     temp_file = epw_path + ".tmp"
     try:
+        with open(epw_path, 'rb') as f_in:
+            lines = f_in.read().splitlines(keepends=True)
+
+        # Skip the header of standard EPW files, which ends with the DATA PERIODS line.
+        # Otherwise, every line is checked.
+        first_data_line = 0
+        if lines and lines[0].lstrip(b'\xef\xbb\xbf \t').upper().startswith(b'LOCATION'):
+            first_data_line = _EPW_HEADER_LINES
+            for index, line in enumerate(lines[:_EPW_HEADER_LINES]):
+                if line.lstrip().upper().startswith(b'DATA PERIODS'):
+                    first_data_line = index + 1
+                    break
+
         modified = False
-        with open(epw_path, 'r', encoding='utf-8', errors='ignore') as f_in, \
-             open(temp_file, 'w', encoding='utf-8', newline='') as f_out:
-            for line in f_in:
-                # EPW data lines typically start with a year (e.g., 19xx, 20xx)
-                # and have many columns.
-                if len(line) > 10 and line[0:1].isdigit():
-                    parts = line.split(',')
-                    if len(parts) >= 5:
-                        # 5th column (index 4) is the minute
-                        if parts[4].strip() == '60':
-                            parts[4] = ' 0' if parts[4].startswith(' ') else '0'
-                            line = ','.join(parts)
-                            modified = True
-                f_out.write(line)
-        
+        for index in range(first_data_line, len(lines)):
+            line = lines[index]
+            # EPW data lines start with a year (e.g., 19xx, 20xx) and have many columns.
+            if not line[:1].isdigit():
+                continue
+            parts = line.split(b',')
+            # 5th column (index 4) is the minute
+            if len(parts) >= 5 and parts[4].strip() == b'60':
+                parts[4] = b' 0' if parts[4].startswith(b' ') else b'0'
+                lines[index] = b','.join(parts)
+                modified = True
+
         if modified:
-            shutil.move(temp_file, epw_path)
-            logging.debug(f"Sanitized minute 60 in: {os.path.basename(epw_path)}")
-        else:
-            os.remove(temp_file)
-            
+            with open(temp_file, 'wb') as f_out:
+                f_out.writelines(lines)
+            os.replace(temp_file, epw_path)
+            logger.debug(f"Sanitized minute 60 in: {os.path.basename(epw_path)}")
+
     except Exception as e:
-        logging.warning(f"Failed to sanitize EPW minutes for {epw_path}: {e}")
+        logger.warning(f"Failed to sanitize EPW minutes for {epw_path}: {e}")
         if os.path.exists(temp_file):
             try:
                 os.remove(temp_file)
-            except:
+            except OSError:
                 pass
 
 

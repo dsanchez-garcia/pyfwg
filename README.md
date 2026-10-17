@@ -46,6 +46,16 @@ You can install `pyfwg` directly from PyPI:
 pip install pyfwg
 ```
 
+### Showing the Log Messages
+
+`pyfwg` reports its progress, warnings and validation errors with Python's standard `logging` module (the `pyfwg` logger), and it does not change the logging configuration of your application. If your script or notebook does not configure logging, call `enable_console_logging()` to show these messages on the console (colored if `colorlog` is installed):
+
+```python
+import pyfwg
+
+pyfwg.enable_console_logging()  # Or, e.g., level='WARNING' to show only warnings and errors
+```
+
 ## Quick Start: Simple Morphing
 
 For direct morphing without complex renaming, use the `morph_epw_global` function.
@@ -162,13 +172,13 @@ iterator.set_default_values(
 
 # 3. Define the runs that will change in a DataFrame
 runs_df = iterator.get_template_dataframe()
-runs_df.loc = {
+runs_df.loc[len(runs_df)] = {
     'epw_paths': 'epws/sevilla.epw',
     'final_output_dir': './results/sevilla_run',
     'fwg_epw_original_lcz': 2, # Use a specific LCZ for Seville
     'fwg_target_uhi_lcz': 3
 }
-runs_df.loc = {
+runs_df.loc[len(runs_df)] = {
     'epw_paths': 'epws/london.epw',
     'final_output_dir': './results/london_run',
     'fwg_epw_original_lcz': 6, # Use a different, valid LCZ for London

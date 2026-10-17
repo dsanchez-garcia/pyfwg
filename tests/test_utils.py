@@ -8,7 +8,9 @@ without needing real file systems or running the actual Java tool.
 
 import os
 import shutil
+import logging
 import pytest
+import numpy as np
 import pandas as pd
 import subprocess
 from unittest.mock import MagicMock, patch
@@ -250,3 +252,69 @@ def test_get_fwg_parameters_info():
     assert "fwg_rcm_pairs" in info
     # Verify some default metadata
     assert info["fwg_create_ensemble"]["default"] is True
+
+def test_sanitize_epw_minutes_preserves_the_header(tmp_path):
+    """
+    The header of the EPW file is kept byte for byte (e.g., Latin-1 location
+    names) and the line endings are preserved: only the minute of the data
+    records after the 8 header lines changes.
+    """
+    header = [
+        "LOCATION,M\xe1laga,AND,ESP,SWEC,084820,36.67,-4.48,1.0,7.0",
+        "DESIGN CONDITIONS,0",
+        "TYPICAL/EXTREME PERIODS,0",
+        "GROUND TEMPERATURES,0",
+        "HOLIDAYS/DAYLIGHT SAVINGS,No,0,0,0",
+        "COMMENTS 1,Estaci\xf3n de M\xe1laga; also S\xe3o Paulo and Z\xfcrich",
+        "COMMENTS 2,Minute 60 is used in all records",
+        "DATA PERIODS,1,1,Data,Sunday, 1/ 1,12/31",
+    ]
+    records = ["1985,1,1,1,60,A7A7,13.0", "1985,1,1,2, 60,A7A7,12.5", "1985,1,1,3,30,A7A7,12.0"]
+    epw = tmp_path / "malaga.epw"
+    epw.write_bytes("\r\n".join(header + records).encode("latin-1") + b"\r\n")
+
+    sanitize_epw_minutes(str(epw))
+
+    lines = epw.read_bytes().split(b"\r\n")
+    assert lines[:8] == [line.encode("latin-1") for line in header]
+    assert lines[8:] == [b"1985,1,1,1,0,A7A7,13.0", b"1985,1,1,2, 0,A7A7,12.5", b"1985,1,1,3,30,A7A7,12.0", b""]
+
+@pytest.mark.parametrize("error", [
+    subprocess.CalledProcessError(1, "java", output="tool output", stderr="tool error"),
+    FileNotFoundError("java"),
+    subprocess.TimeoutExpired(cmd="java", timeout=300),
+])
+def test_uhi_morph_does_not_raise_when_requested(tmp_path, caplog, error):
+    """With raise_on_error=False, a failure of the tool is logged and False is returned."""
+    with patch("subprocess.run", side_effect=error):
+        with caplog.at_level(logging.ERROR, logger="pyfwg"):
+            result = uhi_morph(fwg_epw_path="test.epw", fwg_jar_path="FWG_v4.jar", fwg_output_dir=str(tmp_path / "uhi"),
+                               fwg_original_lcz=14, fwg_target_lcz=1, fwg_version=4, raise_on_error=False)
+    assert result is False
+    assert any(record.levelno == logging.ERROR for record in caplog.records)
+
+def test_uhi_morph_raises_by_default(tmp_path):
+    """By default, errors are raised; a successful run returns True."""
+    kwargs = dict(fwg_epw_path="test.epw", fwg_jar_path="FWG_v4.jar", fwg_output_dir=str(tmp_path / "uhi"),
+                  fwg_original_lcz=14, fwg_target_lcz=1, fwg_version=4)
+    with patch("subprocess.run", side_effect=subprocess.CalledProcessError(1, "java")):
+        with pytest.raises(subprocess.CalledProcessError):
+            uhi_morph(**kwargs)
+    with patch("subprocess.run"):
+        assert uhi_morph(**kwargs) is True
+
+def test_uhi_morph_normalizes_arguments(tmp_path):
+    """LCZs given as floats (e.g., read from Excel) reach the tool as integers, and flags are strict."""
+    kwargs = dict(fwg_epw_path="test.epw", fwg_jar_path="FWG.jar", fwg_output_dir=str(tmp_path / "uhi"))
+    with patch("subprocess.run") as mock_run:
+        uhi_morph(fwg_original_lcz=14.0, fwg_target_lcz=np.float64(2.0), fwg_version=4, **kwargs)
+        assert "-uhi=true:14:2" in mock_run.call_args[0][0]
+
+        uhi_morph(fwg_original_lcz=14.0, fwg_target_lcz=2.0, fwg_limit_variables="False", fwg_version=3, **kwargs)
+        assert mock_run.call_args[0][0][-2:] == ["false", "14:2"]
+
+        with pytest.raises(ValueError, match="must be integers"):
+            uhi_morph(fwg_original_lcz=14.5, fwg_target_lcz=2, fwg_version=4, **kwargs)
+        assert uhi_morph(fwg_original_lcz=14, fwg_target_lcz=2, fwg_limit_variables="maybe", fwg_version=3,
+                         raise_on_error=False, **kwargs) is False
+        assert mock_run.call_count == 2

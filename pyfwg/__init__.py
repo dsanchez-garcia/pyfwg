@@ -3,67 +3,94 @@
 pyfwg: Python Future Weather Generator
 
 This file serves as the main entry point for the pyfwg package.
-It handles the initial setup, such as configuring the logging system with
-optional color support, and it defines the public API by importing the key
-classes, functions, and constants from the various modules. This allows users
-to access all primary features directly from the top-level `pyfwg` import.
+It defines the public API by importing the key classes, functions, and
+constants from the various modules. This allows users to access all primary
+features directly from the top-level `pyfwg` import.
+
+pyfwg does not configure logging when it is imported. Its modules log to the
+'pyfwg' logger, whose messages are shown if the application configures logging
+(e.g., with `logging.basicConfig`). In notebooks and scripts that do not, call
+`pyfwg.enable_console_logging()` to print them on the console.
 """
 
 import logging
+from typing import Optional, TextIO, Union
 
-# --- Colored Logging Configuration ---
-# This block attempts to configure colored logging using the 'colorlog' library.
-# If 'colorlog' is not installed, it gracefully falls back to the standard,
-# non-colored logging setup, ensuring the library remains functional.
-try:
-    # Attempt to import the optional colorlog library.
-    import colorlog
+# --- Logging Configuration ---
+# As recommended for libraries, the package logger only gets a NullHandler.
+# The handlers and levels of the application (e.g., of the root logger) are not
+# modified.
+logging.getLogger(__name__).addHandler(logging.NullHandler())
 
-    # Get the root logger.
-    logger = colorlog.getLogger()
 
-    # If the logger already has handlers (e.g., from an interactive console like
-    # IPython or Jupyter), we remove them to ensure a clean slate. This makes
-    # our custom colored handler the one and only handler.
-    if logger.hasHandlers():
-        logger.handlers.clear()
+def enable_console_logging(level: Union[int, str] = logging.INFO,
+                           color: bool = True,
+                           stream: Optional[TextIO] = None) -> logging.Handler:
+    """Prints the log messages of pyfwg on the console.
 
-    # If the logger already has handlers, it might have been configured already.
-    # This check prevents adding duplicate handlers in some environments (e.g., Jupyter).
-    if not logger.handlers:
-        # Create a handler that outputs to the console stream.
-        handler = colorlog.StreamHandler()
+    pyfwg does not configure logging when it is imported, so its messages
+    (progress, validation errors, etc.) are only shown if the application
+    configures logging. This helper is meant for notebooks and scripts that do
+    not: it adds a console handler to the 'pyfwg' logger and sets the level of
+    that logger. Other loggers, including the root logger, are not modified.
 
-        # Create a formatter that adds color codes to the log output.
-        formatter = colorlog.ColoredFormatter(
-            '%(log_color)s%(asctime)s - %(levelname)s - %(message)s',
-            datefmt='%Y-%m-%d %H:%M:%S',
-            # Define the color for each log level.
-            log_colors={
-                'DEBUG': 'cyan',
-                'INFO': 'green',
-                'WARNING': 'yellow',
-                'ERROR': 'red',
-                'CRITICAL': 'bold_red',
-            }
-        )
+    The messages are colored by level if the optional `colorlog` package is
+    installed. Calling the function again replaces the handler added before,
+    so messages are not duplicated when a notebook cell is run again.
 
-        # Set the custom formatter on the handler.
-        handler.setFormatter(formatter)
+    If the application already logs to the console (e.g., with
+    `logging.basicConfig`), this function is not needed: the messages of pyfwg
+    propagate to its handlers, and their level can be set with
+    `logging.getLogger('pyfwg').setLevel(logging.INFO)`.
 
-        # Add the configured handler to the root logger.
-        logger.addHandler(handler)
-        # Set the default logging level for the library.
-        logger.setLevel(logging.INFO)
+    Args:
+        level (Union[int, str], optional): Minimum level of the messages to
+            show (e.g., `logging.INFO` or 'WARNING'). Defaults to `logging.INFO`.
+        color (bool, optional): If True, colors the messages when `colorlog`
+            is installed. Defaults to True.
+        stream (Optional[TextIO], optional): Stream to write the messages to.
+            Defaults to None, which uses `sys.stderr`.
 
-except ImportError:
-    # If colorlog is not installed, fall back to the standard basicConfig.
-    # This ensures the library works correctly even without the optional dependency.
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(levelname)s - %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
-    )
+    Returns:
+        logging.Handler: The handler that was added. It can be removed with
+        `logging.getLogger('pyfwg').removeHandler(handler)`.
+    """
+    package_logger = logging.getLogger(__name__)
+    log_format = '%(asctime)s - %(levelname)s - %(message)s'
+    date_format = '%Y-%m-%d %H:%M:%S'
+
+    handler = None
+    if color:
+        try:
+            import colorlog
+            handler = colorlog.StreamHandler(stream)
+            handler.setFormatter(colorlog.ColoredFormatter(
+                '%(log_color)s' + log_format,
+                datefmt=date_format,
+                log_colors={
+                    'DEBUG': 'cyan',
+                    'INFO': 'green',
+                    'WARNING': 'yellow',
+                    'ERROR': 'red',
+                    'CRITICAL': 'bold_red',
+                }
+            ))
+        except ImportError:
+            # colorlog is optional: fall back to plain messages.
+            handler = None
+    if handler is None:
+        handler = logging.StreamHandler(stream)
+        handler.setFormatter(logging.Formatter(log_format, datefmt=date_format))
+    # Mark the handler so that a later call can replace it.
+    handler._pyfwg_console_handler = True
+
+    for existing_handler in list(package_logger.handlers):
+        if getattr(existing_handler, '_pyfwg_console_handler', False):
+            package_logger.removeHandler(existing_handler)
+    package_logger.addHandler(handler)
+    package_logger.setLevel(level)
+    return handler
+
 
 # --- Public API Definition ---
 

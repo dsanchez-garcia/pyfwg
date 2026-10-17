@@ -89,6 +89,9 @@ setup(
     install_requires=[
         'importlib_resources; python_version<"3.9"',
         'pandas',
+        # Needed by pandas to read and write the Excel files of export_template_to_excel
+        # and load_runs_from_excel.
+        'openpyxl',
         'colorlog',
     ],
     extras_require={

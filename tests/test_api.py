@@ -92,3 +92,25 @@ def test_morph_epw_global_invalid_config():
         
         with pytest.raises(ValueError, match="FWG parameter validation failed"):
             morph_epw_global(epw_paths="test.epw", fwg_jar_path="FWG.jar")
+
+def test_morph_epw_global_keeps_fwg_params(tmp_path):
+    """
+    The simple API does not replace the values of fwg_params with the defaults of
+    its explicit arguments; only the arguments that are passed override them.
+    """
+    epw = tmp_path / "test.epw"
+    epw.write_text("dummy epw content")
+    with patch("pyfwg.api._run_direct_morphing", return_value=[]) as mock_run:
+        morph_epw_global(
+            epw_paths=str(epw),
+            fwg_jar_path="FWG_v4.jar",
+            fwg_version=4,
+            output_dir=str(tmp_path / "out"),
+            temp_base_dir=str(tmp_path / "temp"),
+            fwg_params={"month_transition_hours": 24, "create_ensemble": False, "winter_sd_shift": 1.5},
+            fwg_winter_sd_shift=1.0
+        )
+    params = mock_run.call_args[0][0].inputs["fwg_params"]
+    assert params["month_transition_hours"] == 24
+    assert params["create_ensemble"] is False
+    assert params["winter_sd_shift"] == 1.0

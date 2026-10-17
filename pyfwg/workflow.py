@@ -13,7 +13,7 @@ from typing import List, Optional, Dict, Any, Union, Tuple
 from .utils import (
     check_lcz_availability, _robust_rmtree, detect_fwg_version, sanitize_epw_minutes,
     detect_fwg_tool, get_fwg_cli_style, get_fwg_distribution_info,
-    _detect_cordex_domain, _normalize_scenario_id
+    _detect_cordex_domain, _normalize_scenario_id, _to_bool, _as_integer, _as_number
 )
 
 # Import constants from the local constants.py file
@@ -29,6 +29,8 @@ from .constants import (
     ENGINE_OUTPUT_PROFILES
 )
 
+logger = logging.getLogger(__name__)
+
 # --- String values used by Global v4 / Europe v2 for the legacy integer IDs ---
 _LEGACY_INTERPOLATION_METHODS = {0: 'IDW', 1: 'BI', 2: 'AVG4P', 3: 'NP'}
 _LEGACY_SOLAR_HOUR_ADJUSTMENTS = {0: 'None', 1: 'By_Month', 2: 'By_Day'}
@@ -40,6 +42,39 @@ _LEGACY_DIFFUSE_TO_DECOMPOSITION = {
     'RIDLEY_BOLAND_LAURET_2010': 'RIDLEY_BOLAND_LAURET_2010', 'ENGERER_2015': 'ENGERER_2015_METHOD_2',
     'PAULESCU_BLAGA_2019': 'PAULESCU_BLAGA_2019'
 }
+
+# Defaults of the FWG parameters that pyfwg passes to every version of the tool.
+# They apply to the parameters that are neither passed as explicit `fwg_`
+# arguments nor set in `fwg_params`.
+_FWG_PARAM_DEFAULTS = {
+    'create_ensemble': True,
+    'winter_sd_shift': 0.0,
+    'summer_sd_shift': 0.0,
+    'month_transition_hours': 72,
+    'use_multithreading': True,
+    'interpolation_method_id': 0,
+    'limit_variables': True,
+    'solar_hour_adjustment': 1,
+    'diffuse_irradiation_model': 1,
+    'epw_original_lcz': 14,
+    'target_uhi_lcz': 1,
+    'output_type': 'EPW',
+}
+
+# Boolean FWG parameters.
+_BOOLEAN_PARAMS = ('create_ensemble', 'use_multithreading', 'limit_variables', 'add_uhi')
+
+# Numeric FWG parameters: (minimum, maximum, whether the value must be an integer).
+_NUMERIC_PARAM_RANGES = {
+    'winter_sd_shift': (-2.0, 2.0, False),
+    'summer_sd_shift': (-2.0, 2.0, False),
+    'month_transition_hours': (0, 336, True),
+    'epw_original_lcz': (1, 17, True),
+    'target_uhi_lcz': (1, 17, True),
+}
+
+# FWG parameters that take an integer ID or the name of an option.
+_OPTION_ID_PARAMS = ('interpolation_method_id', 'solar_hour_adjustment', 'diffuse_irradiation_model')
 
 # Parameters that only the FWG Engine distributions (Global v5+, Europe v3+ and
 # CORDEX regional) understand. Their default (None) leaves the tool's default.
@@ -86,7 +121,10 @@ def _as_list(value: Any) -> List[Any]:
 
 
 def _normalize_timeframe(value: Any) -> Any:
-    """(Private) Converts a future period (e.g., 2050, '2050' or '2050s') into an integer year."""
+    """(Private) Converts a future period (e.g., 2050, 2050.0, '2050' or '2050s') into an integer year."""
+    year = _as_int_id(value)
+    if year is not None:
+        return year
     text = re.sub(r'[^0-9a-z]', '', str(value).lower())
     if text.endswith('s'):
         text = text[:-1]
@@ -144,6 +182,50 @@ def _format_cli_value(value: Any) -> str:
     if isinstance(value, (list, tuple, set)):
         return ','.join(str(item) for item in value)
     return str(value)
+
+
+def _cli_flag(value: Any, default: bool) -> str:
+    """(Private) Formats a boolean option as 'true' or 'false'. None takes the default value."""
+    return _format_cli_value(default if value is None else _to_bool(value))
+
+
+def _normalize_param_types(params: Dict[str, Any]):
+    """(Private) Converts the FWG parameters to the types expected by the tool, in place.
+
+    Values read from Excel or from DataFrames with gaps are often floats (e.g.,
+    14.0 or 72.0), NumPy numbers or strings (e.g., 'False'). They are converted
+    when their meaning is unambiguous: integers (14.0 -> 14), numbers (NumPy ->
+    Python) and booleans (1, 'false', etc.). Any other value is left unchanged,
+    so that the validation rejects it.
+
+    Args:
+        params (Dict[str, Any]): The FWG parameters, modified in place.
+    """
+    for key in _BOOLEAN_PARAMS:
+        if params.get(key) is not None:
+            try:
+                params[key] = _to_bool(params[key])
+            except ValueError:
+                pass
+    for key, (_, _, is_integer) in _NUMERIC_PARAM_RANGES.items():
+        if params.get(key) is not None:
+            value = _as_integer(params[key]) if is_integer else _as_number(params[key])
+            if value is not None:
+                params[key] = value
+    # Option IDs (e.g., 0.0 -> 0); names such as 'IDW' are kept.
+    for key in _OPTION_ID_PARAMS:
+        if params.get(key) is not None:
+            option_id = _as_integer(params[key])
+            if option_id is not None:
+                params[key] = option_id
+    if params.get('uncertainty_sigma') is not None:
+        sigma = _as_number(params['uncertainty_sigma'])
+        if sigma is not None:
+            params['uncertainty_sigma'] = sigma
+    # The version is stored as a string (e.g., 4.0 -> '4').
+    if params.get('fwg_version') is not None:
+        major_version = _as_integer(params['fwg_version'])
+        params['fwg_version'] = str(major_version) if major_version is not None else str(params['fwg_version'])
 
 
 def _generated_files_dir(temp_dir: str, cli_style: Optional[str]) -> str:
@@ -284,7 +366,7 @@ class _MorphingWorkflowBase:
             ValueError: If neither of `input_filename_pattern` and
                 `keyword_mapping` are provided.
         """
-        logging.info("--- Step 1: Mapping categories from filenames ---")
+        logger.info("--- Step 1: Mapping categories from filenames ---")
 
         # Ensure that at least one mapping strategy is provided.
         if not input_filename_pattern and not keyword_mapping:
@@ -301,7 +383,7 @@ class _MorphingWorkflowBase:
         for epw_path in epw_files:
             # Check if the file actually exists before processing.
             if not os.path.exists(epw_path):
-                logging.warning(f"EPW file not found, skipping: {epw_path}")
+                logger.warning(f"EPW file not found, skipping: {epw_path}")
                 continue
 
             # This dictionary will hold the final categories for the current file.
@@ -315,7 +397,7 @@ class _MorphingWorkflowBase:
                 # Attempt to match the regex pattern against the filename.
                 match = re.search(input_filename_pattern, epw_base_name)
                 if not match:
-                    logging.warning(f"Pattern did not match '{epw_base_name}'. Skipping.")
+                    logger.warning(f"Pattern did not match '{epw_base_name}'. Skipping.")
                     continue
 
                 # Extract the raw values from the named capture groups.
@@ -360,7 +442,7 @@ class _MorphingWorkflowBase:
 
             # After processing, check if any categories were successfully found.
             if file_categories:
-                logging.info(f"Mapped '{epw_path}': {file_categories}")
+                logger.info(f"Mapped '{epw_path}': {file_categories}")
 
                 # In keyword-only mode, check for completeness.
                 if keyword_mapping and not input_filename_pattern:
@@ -370,7 +452,7 @@ class _MorphingWorkflowBase:
                     # If not all categories were found, classify the file as incomplete.
                     if len(found_categories) < len(all_defined_categories):
                         missing = all_defined_categories - found_categories
-                        logging.warning(f"File '{os.path.basename(epw_path)}' is missing categories: {list(missing)}.")
+                        logger.warning(f"File '{os.path.basename(epw_path)}' is missing categories: {list(missing)}.")
                         self.incomplete_epw_categories[epw_path] = file_categories
                     else:
                         # The file is complete.
@@ -380,9 +462,9 @@ class _MorphingWorkflowBase:
                     self.epw_categories[epw_path] = file_categories
             else:
                 # If no categories could be mapped, warn the user.
-                logging.warning(f"Could not map any categories for '{epw_path}'. Skipping.")
+                logger.warning(f"Could not map any categories for '{epw_path}'. Skipping.")
 
-        logging.info("Category mapping complete.")
+        logger.info("Category mapping complete.")
 
 
     def _validate_fwg_params(self, params: Dict[str, Any]) -> bool:
@@ -409,7 +491,7 @@ class _MorphingWorkflowBase:
         try:
             cli_style = get_fwg_cli_style(version, self.fwg_tool or 'global')
         except ValueError as e:
-            logging.warning(f"Validation failed: {e}")
+            logger.warning(f"Validation failed: {e}")
             return False
         is_engine = cli_style == FWG_CLI_ENGINE
 
@@ -420,27 +502,28 @@ class _MorphingWorkflowBase:
             for model in params[self.model_arg_name]:
                 model_key = _canonical_model_id(model) if is_engine else model
                 if model_key not in known_models:
-                    logging.warning(f"Validation failed: Model '{model}' is not valid for this tool.")
+                    logger.warning(f"Validation failed: Model '{model}' is not valid for this tool.")
                     is_valid = False
 
-        # Validate float range parameters.
-        if not -2.0 <= params.get('winter_sd_shift', 0.0) <= 2.0:
-            logging.warning(f"Validation failed: 'fwg_winter_sd_shift' must be between -2.0 and 2.0.")
-            is_valid = False
-        if not -2.0 <= params.get('summer_sd_shift', 0.0) <= 2.0:
-            logging.warning(f"Validation failed: 'fwg_summer_sd_shift' must be between -2.0 and 2.0.")
-            is_valid = False
+        # Validate the boolean parameters (accepted strings and numbers are converted beforehand).
+        for key in _BOOLEAN_PARAMS:
+            value = params.get(key)
+            if value is not None and not isinstance(value, bool):
+                logger.warning(f"Validation failed: 'fwg_{key}' must be True or False, but it is {value!r}.")
+                is_valid = False
 
-        # Validate integer range parameters.
-        if not 0 <= params.get('month_transition_hours', 72) <= 336:
-            logging.warning(f"Validation failed: 'fwg_month_transition_hours' must be between 0 and 336.")
-            is_valid = False
-        if not 1 <= params.get('epw_original_lcz', 1) <= 17:
-            logging.warning(f"Validation failed: 'fwg_epw_original_lcz' must be between 1 and 17.")
-            is_valid = False
-        if not 1 <= params.get('target_uhi_lcz', 1) <= 17:
-            logging.warning(f"Validation failed: 'fwg_target_uhi_lcz' must be between 1 and 17.")
-            is_valid = False
+        # Validate the type and range of the numeric parameters.
+        for key, (minimum, maximum, is_integer) in _NUMERIC_PARAM_RANGES.items():
+            value = params.get(key)
+            if value is None:
+                continue
+            expected_type = numbers.Integral if is_integer else numbers.Real
+            if isinstance(value, bool) or not isinstance(value, expected_type) or not minimum <= value <= maximum:
+                kind = 'an integer' if is_integer else 'a number'
+                logger.warning(
+                    f"Validation failed: 'fwg_{key}' must be {kind} between {minimum} and {maximum}, "
+                    f"but it is {value!r}.")
+                is_valid = False
 
         # Validate enum parameters (Integer IDs or V4 Strings).
         if cli_style == FWG_CLI_POSITIONAL:
@@ -461,13 +544,13 @@ class _MorphingWorkflowBase:
             validations = {}
             interpolation_method = params.get('interpolation_method_id')
             if interpolation_method is not None and _engine_interpolation_token(interpolation_method) is None:
-                logging.warning(
+                logger.warning(
                     f"Validation failed: 'fwg_interpolation_method_id' has value '{interpolation_method}', "
                     f"but allowed values are {ENGINE_INTERPOLATION_METHODS}.")
                 is_valid = False
             diffuse_model = params.get('diffuse_irradiation_model')
             if diffuse_model is not None and _engine_decomposition_from_legacy(diffuse_model) is None:
-                logging.warning(
+                logger.warning(
                     f"Validation failed: 'fwg_diffuse_irradiation_model' has value '{diffuse_model}'. "
                     f"Use 'fwg_decomposition_method' with one of {ENGINE_DECOMPOSITION_METHODS}.")
                 is_valid = False
@@ -475,11 +558,12 @@ class _MorphingWorkflowBase:
         for key, allowed_values in validations.items():
             value = params.get(key)
             try:
-                is_allowed = value is None or value in allowed_values
+                # Booleans are not IDs, although True == 1.
+                is_allowed = value is None or (not isinstance(value, bool) and value in allowed_values)
             except TypeError:
                 is_allowed = False
             if not is_allowed:
-                logging.warning(
+                logger.warning(
                     f"Validation failed: 'fwg_{key}' has value '{value}', but allowed values are "
                     f"{sorted(allowed_values, key=str)}.")
                 is_valid = False
@@ -487,7 +571,7 @@ class _MorphingWorkflowBase:
         # Parameters of the FWG Engine cannot be used with older versions of the tool.
         engine_only_params = [f"fwg_{name}" for name in _ENGINE_ONLY_PARAMS if params.get(name) is not None]
         if engine_only_params and not is_engine:
-            logging.warning(
+            logger.warning(
                 f"Validation failed: {engine_only_params} require an FWG Engine distribution "
                 f"(Global v5+, Europe v3+ or CORDEX regional), but version {version} of the tool was detected.")
             is_valid = False
@@ -501,11 +585,11 @@ class _MorphingWorkflowBase:
         if params.get('output_type'):
             valid_output_types = {'EPW', 'SPAIN_MET', 'PORTUGAL_CSV'}
             if params['output_type'] not in valid_output_types:
-                logging.warning(f"Validation failed: 'fwg_output_type' has value '{params['output_type']}', but allowed values are {valid_output_types}.")
+                logger.warning(f"Validation failed: 'fwg_output_type' has value '{params['output_type']}', but allowed values are {valid_output_types}.")
                 if params['output_type'].upper() == 'MET':
-                    logging.warning("Suggestion: Did you mean 'SPAIN_MET'?")
+                    logger.warning("Suggestion: Did you mean 'SPAIN_MET'?")
                 elif params['output_type'].upper() == 'CSV':
-                    logging.warning("Suggestion: Did you mean 'PORTUGAL_CSV'?")
+                    logger.warning("Suggestion: Did you mean 'PORTUGAL_CSV'?")
                 is_valid = False
 
         return is_valid
@@ -534,11 +618,11 @@ class _MorphingWorkflowBase:
             if selected is None:
                 continue
             if not selected:
-                logging.warning(f"Validation failed: 'fwg_{key}' must contain at least one value.")
+                logger.warning(f"Validation failed: 'fwg_{key}' must contain at least one value.")
                 is_valid = False
             for value in selected:
                 if value not in available:
-                    logging.warning(f"Validation failed: '{value}' is not available in 'fwg_{key}'. Available values: {available}.")
+                    logger.warning(f"Validation failed: '{value}' is not available in 'fwg_{key}'. Available values: {available}.")
                     is_valid = False
 
         # Validate the options that take a fixed set of values.
@@ -553,7 +637,7 @@ class _MorphingWorkflowBase:
         for key, allowed_values in option_validations.items():
             value = params.get(key)
             if value is not None and _normalize_option(value) not in allowed_values:
-                logging.warning(f"Validation failed: 'fwg_{key}' has value '{value}', but allowed values are {sorted(allowed_values)}.")
+                logger.warning(f"Validation failed: 'fwg_{key}' has value '{value}', but allowed values are {sorted(allowed_values)}.")
                 is_valid = False
 
         sigma = params.get('uncertainty_sigma')
@@ -563,14 +647,14 @@ class _MorphingWorkflowBase:
             except (TypeError, ValueError):
                 is_valid_sigma = False
             if not is_valid_sigma:
-                logging.warning("Validation failed: 'fwg_uncertainty_sigma' must be a finite, non-negative number.")
+                logger.warning("Validation failed: 'fwg_uncertainty_sigma' must be a finite, non-negative number.")
                 is_valid = False
 
         # The engine rejects seasonal temperature spreads combined with a non-central case.
         variant = params.get('uncertainty_variant')
         if variant is not None and _normalize_option(variant) != 'CENTRAL':
             if params.get('winter_sd_shift') or params.get('summer_sd_shift'):
-                logging.warning(
+                logger.warning(
                     "Validation failed: a non-central 'fwg_uncertainty_variant' cannot be combined with "
                     "non-zero 'fwg_winter_sd_shift' or 'fwg_summer_sd_shift'.")
                 is_valid = False
@@ -594,7 +678,7 @@ class _MorphingWorkflowBase:
                 missing_scenarios = [s for s in requested_scenarios if details['scenarios'] and s not in details['scenarios']]
                 missing_timeframes = [t for t in requested_timeframes if details['timeframes'] and t not in details['timeframes']]
                 if missing_scenarios or missing_timeframes:
-                    logging.warning(
+                    logger.warning(
                         f"Validation failed: Model '{model}' does not provide the scenarios {missing_scenarios} "
                         f"or future periods {missing_timeframes}. Restrict 'fwg_scenarios'/'fwg_timeframes' "
                         f"or select other models.")
@@ -614,27 +698,27 @@ class _MorphingWorkflowBase:
             bool: True if the options can be passed to the tool, False otherwise.
         """
         if cli_style == FWG_CLI_POSITIONAL:
-            logging.warning(
+            logger.warning(
                 "Validation failed: 'fwg_extra_args' requires a key-value command line "
                 "(Global v4+, Europe v2+ or CORDEX regional).")
             return False
         if not isinstance(extra_args, dict):
-            logging.warning("Validation failed: 'fwg_extra_args' must be a dictionary of option names and values.")
+            logger.warning("Validation failed: 'fwg_extra_args' must be a dictionary of option names and values.")
             return False
 
         is_valid = True
         for key, value in extra_args.items():
             name = str(key).lstrip('-')
             if not re.fullmatch(r'[A-Za-z][A-Za-z0-9_]*', name):
-                logging.warning(f"Validation failed: '{key}' is not a valid option name for 'fwg_extra_args'.")
+                logger.warning(f"Validation failed: '{key}' is not a valid option name for 'fwg_extra_args'.")
                 is_valid = False
             elif name in _RESERVED_CLI_OPTIONS:
-                logging.warning(
+                logger.warning(
                     f"Validation failed: option '{name}' is set by pyfwg and cannot be passed through "
                     f"'fwg_extra_args'. Use the corresponding 'fwg_' argument instead.")
                 is_valid = False
             if value is None:
-                logging.warning(f"Validation failed: option '{name}' in 'fwg_extra_args' has no value.")
+                logger.warning(f"Validation failed: option '{name}' in 'fwg_extra_args' has no value.")
                 is_valid = False
         return is_valid
 
@@ -667,25 +751,47 @@ class _MorphingWorkflowBase:
             return scenarios, models, timeframes
         return list(type(self).tool_scenarios), set(type(self).valid_models), list(ALL_POSSIBLE_YEARS)
 
-    def _check_jar_matches_workflow(self, fwg_jar_path: str):
-        """(Private) Blocks the execution if the JAR clearly belongs to another FWG distribution."""
+    def _check_jar_matches_workflow(self, fwg_jar_path: str, fwg_version: Optional[str] = None):
+        """(Private) Blocks the execution if the JAR clearly belongs to another FWG distribution.
+
+        Args:
+            fwg_jar_path (str): Path to the FWG JAR file.
+            fwg_version (Optional[str], optional): The resolved version of the tool.
+        """
         detected_tool = detect_fwg_tool(fwg_jar_path)
         if detected_tool is None or not self.fwg_tool:
             return
+        workflow_classes = {
+            'global': 'MorphingWorkflowGlobal', 'europe': 'MorphingWorkflowEurope', 'cordex': 'MorphingWorkflowCordex'
+        }
         # The Europe distribution (EUR-11) is also a CORDEX regional distribution.
         compatible_tools = {self.fwg_tool, 'europe'} if self.fwg_tool == 'cordex' else {self.fwg_tool}
         if detected_tool not in compatible_tools:
-            workflow_classes = {
-                'global': 'MorphingWorkflowGlobal', 'europe': 'MorphingWorkflowEurope', 'cordex': 'MorphingWorkflowCordex'
-            }
             message = (f"The JAR '{os.path.basename(fwg_jar_path)}' belongs to the '{detected_tool}' distribution of "
                        f"the tool, but {type(self).__name__} works with the '{self.fwg_tool}' distribution.")
             if detected_tool in workflow_classes:
                 message += f" Use {workflow_classes[detected_tool]} instead."
             else:
                 message += " This distribution is not supported by pyfwg."
-            logging.error(message)
+            logger.error(message)
             self.is_config_valid = False
+            return
+
+        # Only the versions of the Europe distribution that run on the FWG Engine (v3+) are
+        # CORDEX regional distributions. Europe v1.x and v2.x use older command lines.
+        if detected_tool != self.fwg_tool and fwg_version is not None:
+            try:
+                detected_cli_style = get_fwg_cli_style(fwg_version, detected_tool)
+            except ValueError:
+                # An invalid version is already reported when the command-line style is resolved.
+                return
+            if detected_cli_style != FWG_CLI_ENGINE:
+                logger.error(
+                    f"The JAR '{os.path.basename(fwg_jar_path)}' is version {fwg_version} of the '{detected_tool}' "
+                    f"distribution, which does not run on the FWG Engine. {type(self).__name__} requires an FWG "
+                    f"Engine distribution (Europe v3+ or a CORDEX regional distribution). "
+                    f"Use {workflow_classes[detected_tool]} instead.")
+                self.is_config_valid = False
 
     def _prepare_engine_params(self, fwg_jar_path: str, params: Dict[str, Any]):
         """(Private) Adapts the parameters to an FWG Engine distribution.
@@ -702,13 +808,13 @@ class _MorphingWorkflowBase:
         self.tool_scenarios, self.valid_models, self.available_timeframes = self._engine_capabilities(
             fwg_jar_path, self.distribution_info)
         if self.distribution_info:
-            logging.info(
+            logger.info(
                 f"Detected {self.distribution_info.get('name')} v{self.distribution_info.get('version')} "
                 f"(FWG Engine {self.distribution_info.get('engine_version') or 'unknown version'}).")
 
         # The FWG Engine does not support the Urban Heat Island effect.
         if params.get('add_uhi'):
-            logging.warning(
+            logger.warning(
                 "The FWG Engine distributions (Global v5+, Europe v3+ and CORDEX regional) do not support the "
                 "Urban Heat Island (UHI) effect, so 'fwg_add_uhi' is ignored. Use FWG Global v4.x or Europe v2.x "
                 "(or pyfwg.uhi_morph with those versions) to apply it.")
@@ -721,7 +827,7 @@ class _MorphingWorkflowBase:
             decomposition_method = _engine_decomposition_from_legacy(diffuse_model)
             if decomposition_method:
                 params['decomposition_method'] = decomposition_method
-                logging.info(
+                logger.info(
                     f"'fwg_diffuse_irradiation_model={diffuse_model}' is applied as "
                     f"'fwg_decomposition_method={decomposition_method}'. Use 'fwg_decomposition_method' to "
                     f"select any of the FWG Engine methods: {ENGINE_DECOMPOSITION_METHODS}.")
@@ -738,7 +844,7 @@ class _MorphingWorkflowBase:
         # model, the ensemble is equivalent to the output of that model.
         models = params.get(self.model_arg_name)
         if models is not None and len(models) == 1 and params.get('create_ensemble', True):
-            logging.warning(
+            logger.warning(
                 f"The FWG Engine needs at least two models to create an ensemble. Since only '{models[0]}' "
                 f"was selected, 'fwg_create_ensemble' is set to False.")
             params['create_ensemble'] = False
@@ -755,19 +861,19 @@ class _MorphingWorkflowBase:
                                     fwg_show_tool_output: bool,
                                     fwg_params: Optional[Dict[str, Any]],
                                     fwg_models: Optional[List[str]],
-                                    fwg_create_ensemble: bool,
-                                    fwg_winter_sd_shift: float,
-                                    fwg_summer_sd_shift: float,
-                                    fwg_month_transition_hours: int,
-                                    fwg_use_multithreading: bool,
-                                    fwg_interpolation_method_id: Union[int, str],
-                                    fwg_limit_variables: bool,
-                                    fwg_solar_hour_adjustment: Union[int, str],
-                                    fwg_diffuse_irradiation_model: Union[int, str],
+                                    fwg_create_ensemble: Optional[bool],
+                                    fwg_winter_sd_shift: Optional[float],
+                                    fwg_summer_sd_shift: Optional[float],
+                                    fwg_month_transition_hours: Optional[int],
+                                    fwg_use_multithreading: Optional[bool],
+                                    fwg_interpolation_method_id: Optional[Union[int, str]],
+                                    fwg_limit_variables: Optional[bool],
+                                    fwg_solar_hour_adjustment: Optional[Union[int, str]],
+                                    fwg_diffuse_irradiation_model: Optional[Union[int, str]],
                                     fwg_add_uhi: Optional[bool],
-                                    fwg_epw_original_lcz: int,
-                                    fwg_target_uhi_lcz: int,
-                                    fwg_output_type: str = 'EPW',
+                                    fwg_epw_original_lcz: Optional[int],
+                                    fwg_target_uhi_lcz: Optional[int],
+                                    fwg_output_type: Optional[str] = None,
                                     fwg_version: Optional[Union[str, int]] = None,
                                     # --- FWG Engine arguments (Global v5+, Europe v3+, CORDEX regional) ---
                                     fwg_scenarios: Optional[List[str]] = None,
@@ -789,8 +895,10 @@ class _MorphingWorkflowBase:
         It performs three main tasks:
         1.  **Configuration**: It merges the base `fwg_params` dictionary with
             any explicit `fwg_` keyword arguments, with the latter taking
-            precedence unless they are None. It also detects the version of the
-            tool and adapts the parameters to its command line.
+            precedence unless they are None. Parameters set in neither place
+            take the defaults of pyfwg, and all values are converted to the
+            types expected by the tool (e.g., 14.0 -> 14). It also detects the
+            version of the tool and adapts the parameters to its command line.
         2.  **Validation**: It validates the final set of parameters against
             the tool's known constraints and sets the `self.is_config_valid` flag.
         3.  **Preview Generation**: It constructs and prints a detailed "dry run"
@@ -803,7 +911,7 @@ class _MorphingWorkflowBase:
         if not self.epw_categories and not self.incomplete_epw_categories:
             raise RuntimeError("Please run map_categories() first. No files were successfully mapped.")
 
-        logging.info("--- Step 2: Configuring and Previewing Morphing Plan ---")
+        logger.info("--- Step 2: Configuring and Previewing Morphing Plan ---")
 
         # Start by assuming valid config; detection or validation may set it to False.
         self.is_config_valid = True
@@ -813,9 +921,8 @@ class _MorphingWorkflowBase:
         # Start with the base dictionary, or an empty one if not provided.
         final_fwg_params = fwg_params.copy() if fwg_params else {}
 
-        # Create a dictionary of all explicit keyword arguments. This captures both
-        # user-provided values and the default values for any omitted arguments,
-        # ensuring all parameters are available for filename placeholders.
+        # Create a dictionary of all explicit keyword arguments. Arguments that were
+        # not passed are None, so they do not replace the values of fwg_params.
         overrides = {
             self.model_arg_name: fwg_models,
             'create_ensemble': fwg_create_ensemble,
@@ -851,6 +958,14 @@ class _MorphingWorkflowBase:
             final_fwg_params.setdefault(key, None)
         if final_fwg_params.get(self.model_arg_name) is not None:
             final_fwg_params[self.model_arg_name] = _as_list(final_fwg_params[self.model_arg_name])
+        # Parameters set in neither place take the defaults of pyfwg, so that all of
+        # them are available for the command line and the filename placeholders.
+        for key, default_value in _FWG_PARAM_DEFAULTS.items():
+            if final_fwg_params.get(key) is None:
+                final_fwg_params[key] = default_value
+        # Convert the values to the types expected by the tool (e.g., 14.0 read from
+        # Excel -> 14, or 'False' -> False). Invalid values are rejected below.
+        _normalize_param_types(final_fwg_params)
 
         # --- 1b. Resolve FWG Version ---
         # If the version wasn't explicitly provided, try to detect it from the JAR path.
@@ -859,14 +974,14 @@ class _MorphingWorkflowBase:
                 # We use fwg_jar_path which is passed to the method
                 detected_version = detect_fwg_version(fwg_jar_path)
                 final_fwg_params['fwg_version'] = detected_version
-                logging.info(f"Auto-detected FWG version: {detected_version}")
+                logger.info(f"Auto-detected FWG version: {detected_version}")
             except ValueError as e:
-                logging.error(f"Version detection failed: {e}")
+                logger.error(f"Version detection failed: {e}")
                 # We can't safely proceed without a version
                 final_fwg_params['fwg_version'] = '3' # Safe fallback for validation if needed, but we mark as invalid
                 self.is_config_valid = False
             except Exception as e:
-                logging.error(f"Unexpected error during version detection: {e}")
+                logger.error(f"Unexpected error during version detection: {e}")
                 final_fwg_params['fwg_version'] = '3'
                 self.is_config_valid = False
 
@@ -878,10 +993,10 @@ class _MorphingWorkflowBase:
         try:
             self.cli_style = get_fwg_cli_style(final_fwg_params['fwg_version'], self.fwg_tool or 'global')
         except ValueError as e:
-            logging.error(f"Version check failed: {e}")
+            logger.error(f"Version check failed: {e}")
             self.cli_style = FWG_CLI_POSITIONAL
             self.is_config_valid = False
-        self._check_jar_matches_workflow(fwg_jar_path)
+        self._check_jar_matches_workflow(fwg_jar_path, final_fwg_params['fwg_version'])
 
         if self.cli_style == FWG_CLI_ENGINE:
             self._prepare_engine_params(fwg_jar_path, final_fwg_params)
@@ -905,7 +1020,7 @@ class _MorphingWorkflowBase:
             review_params[self.model_arg_name] = list(ensemble_models) if ensemble_models else sorted(self.valid_models)
 
         if not review_params.get('create_ensemble', True) and len(review_params[self.model_arg_name]) > 1:
-            logging.warning(
+            logger.warning(
                 "With 'fwg_create_ensemble=False', the tool generates one file per model for each scenario and "
                 "year, but they share the same output filename. Only the first file of each name will be kept; "
                 "run one model per workflow (e.g., with MorphingIterator) to keep all of them.")
@@ -916,9 +1031,9 @@ class _MorphingWorkflowBase:
             'ensemble': '1' if review_params.get('create_ensemble', True) else '0',
             'sd_shift': f"{review_params.get('winter_sd_shift', 0.0)}:{review_params.get('summer_sd_shift', 0.0)}",
             'month_transition_hours': str(review_params.get('month_transition_hours', 72)),
-            'do_multithred_computation': str(review_params.get('use_multithreading', True)).lower(),
+            'do_multithred_computation': 'true' if review_params.get('use_multithreading', True) else 'false',
             'interpolation_method_id': str(review_params.get('interpolation_method_id', 0)),
-            'do_limit_variables': str(review_params.get('limit_variables', True)).lower(),
+            'do_limit_variables': 'true' if review_params.get('limit_variables', True) else 'false',
             'solar_hour_adjustment_option': str(review_params.get('solar_hour_adjustment', 1)),
             'diffuse_irradiation_model_option': str(review_params.get('diffuse_irradiation_model', 1)),
             'uhi_combined': f"{'1' if review_params.get('add_uhi', True) else '0'}:{review_params.get('epw_original_lcz', 14)}:{review_params.get('target_uhi_lcz', 1)}"
@@ -966,7 +1081,8 @@ class _MorphingWorkflowBase:
         # Print the configuration summary and preview header.
         print("\n" + "=" * 60 + "\n          MORPHING CONFIGURATION & PREVIEW\n" + "=" * 60)
         if not self.is_config_valid:
-            print("!!! WARNING: Configuration has invalid parameters. See logs above. Execution will be blocked. !!!\n")
+            print("!!! WARNING: Configuration has invalid parameters. See the log messages above (if they are not "
+                  "shown, call pyfwg.enable_console_logging()). Execution will be blocked. !!!\n")
 
         print(f"  - FWG JAR Path: {self.inputs['fwg_jar_path']}")
         print(f"  - Final Output Directory: {os.path.abspath(self.inputs['final_output_dir'])}")
@@ -1052,7 +1168,7 @@ class _MorphingWorkflowBase:
         if not self.is_config_valid:
             raise RuntimeError("Morphing configuration is invalid. Please correct the errors reported during configure_and_preview() and run it again.")
 
-        logging.info("--- Step 4: Executing morphing workflow ---")
+        logger.info("--- Step 4: Executing morphing workflow ---")
 
         # Create the final output and temporary base directories if they don't exist.
         os.makedirs(self.inputs['final_output_dir'], exist_ok=True)
@@ -1063,14 +1179,14 @@ class _MorphingWorkflowBase:
         for epw_path in self.epws_to_be_morphed:
             # A final check to ensure a valid rename plan exists for this file.
             if epw_path not in self.rename_plan:
-                logging.warning(f"Skipping '{os.path.basename(epw_path)}' as it had errors during the preview stage.")
+                logger.warning(f"Skipping '{os.path.basename(epw_path)}' as it had errors during the preview stage.")
                 continue
 
             # --- Pre-flight check: Validate LCZ availability ---
             # This check is only performed if the user has enabled the UHI feature.
             fwg_params = self.inputs['fwg_params']
             if fwg_params.get('add_uhi', False):
-                logging.info(f"Validating LCZ availability for {os.path.basename(epw_path)}...")
+                logger.info(f"Validating LCZ availability for {os.path.basename(epw_path)}...")
                 # Call the utility function to perform the check using the configured parameters.
                 lcz_validation_result = check_lcz_availability(
                     epw_path=epw_path,
@@ -1084,16 +1200,16 @@ class _MorphingWorkflowBase:
 
                 # If validation fails (returns anything other than True), log the error and skip this file.
                 if lcz_validation_result is not True:
-                    logging.error(f"LCZ validation failed for '{os.path.basename(epw_path)}'. This file will be skipped.")
+                    logger.error(f"LCZ validation failed for '{os.path.basename(epw_path)}'. This file will be skipped.")
                     # If the function returned a dictionary, it contains the detailed error messages.
                     if isinstance(lcz_validation_result, dict):
                         # Print the specific error messages (e.g., "The original LCZ '1' is not available.").
                         for error_message in lcz_validation_result.get("invalid_messages", []):
-                            logging.error(error_message)
+                            logger.error(error_message)
                         # Print the list of available LCZs for the user's convenience.
-                        logging.error("The following LCZs are available for this location:")
+                        logger.error("The following LCZs are available for this location:")
                         for lcz in lcz_validation_result.get("available", []):
-                            logging.error(f"- {lcz}")
+                            logger.error(f"- {lcz}")
                     continue  # Skip to the next EPW file in the loop.
 
             # --- Morphing Execution ---
@@ -1110,10 +1226,10 @@ class _MorphingWorkflowBase:
                 self._process_generated_files(epw_path, temp_epw_output_dir)
                 # Check the instance's state to decide whether to clean up.
                 if self.inputs.get('delete_temp_files', False):
-                    logging.info(f"Deleting temporary directory: {temp_epw_output_dir}")
+                    logger.info(f"Deleting temporary directory: {temp_epw_output_dir}")
                     _robust_rmtree(temp_epw_output_dir)
 
-        logging.info("Morphing workflow finished.")
+        logger.info("Morphing workflow finished.")
 
     def _current_cli_style(self) -> str:
         """(Private) Returns the command-line style of the configured tool."""
@@ -1144,7 +1260,7 @@ class _MorphingWorkflowBase:
         try:
             temp_epw_path = os.path.join(temp_output_dir, os.path.basename(epw_path))
             shutil.copy2(epw_path, temp_epw_path)
-            logging.info(f"Copied input file to temporary directory: {temp_epw_path}")
+            logger.info(f"Copied input file to temporary directory: {temp_epw_path}")
 
             # --- Sanitization Step ---
             # Some date-time libraries (like java.time in FWG) fail when encountering minute 60.
@@ -1152,7 +1268,7 @@ class _MorphingWorkflowBase:
             sanitize_epw_minutes(temp_epw_path)
             # -------------------------
         except Exception as e:
-            logging.error(f"Failed to copy EPW to temporary directory: {e}")
+            logger.error(f"Failed to copy EPW to temporary directory: {e}")
             return False
 
         formatted_params = self.inputs['fwg_params_formatted']
@@ -1198,12 +1314,12 @@ class _MorphingWorkflowBase:
                 print("  --- End of FWG Output ---")
             return True
         except subprocess.CalledProcessError as e:
-            logging.error(f"Error morphing {os.path.basename(epw_path)}:")
-            if e.stdout: logging.error(f"STDOUT:\n{e.stdout}")
-            if e.stderr: logging.error(f"STDERR:\n{e.stderr}")
+            logger.error(f"Error morphing {os.path.basename(epw_path)}:")
+            if e.stdout: logger.error(f"STDOUT:\n{e.stdout}")
+            if e.stderr: logger.error(f"STDERR:\n{e.stderr}")
             return False
         except subprocess.TimeoutExpired as e:
-            logging.error(f"Error morphing {os.path.basename(epw_path)}: the tool did not finish within {e.timeout} seconds.")
+            logger.error(f"Error morphing {os.path.basename(epw_path)}: the tool did not finish within {e.timeout} seconds.")
             return False
 
     def _build_command_v3(self, original_epw_path: str, temp_epw_path: str, temp_output_dir: str, formatted_params: Dict[str, str]) -> List[str]:
@@ -1247,8 +1363,7 @@ class _MorphingWorkflowBase:
         models_str = ",".join(models) if isinstance(models, list) else str(models)
 
         # UHI String: true:orig:target or false
-        add_uhi = str(params.get('add_uhi', True)).lower()
-        if add_uhi == 'true':
+        if _cli_flag(params.get('add_uhi'), True) == 'true':
             uhi_val = f"true:{params.get('epw_original_lcz', 14)}:{params.get('target_uhi_lcz', 1)}"
         else:
             uhi_val = "false"
@@ -1259,13 +1374,13 @@ class _MorphingWorkflowBase:
             f'-epw={os.path.abspath(temp_epw_path)}',
             f'-output_folder={os.path.abspath(temp_output_dir)}{os.sep}', # Ensure trailing slash if tool needs it
             f'-models={models_str}',
-            f'-ensemble={str(params.get("create_ensemble", True)).lower()}',
+            f'-ensemble={_cli_flag(params.get("create_ensemble"), True)}',
             f'-temp_shift_winter={params.get("winter_sd_shift", 0.0)}',
             f'-temp_shift_summer={params.get("summer_sd_shift", 0.0)}',
             f'-smooth_hours={params.get("month_transition_hours", 72)}',
-            f'-multithread={str(params.get("use_multithreading", True)).lower()}',
+            f'-multithread={_cli_flag(params.get("use_multithreading"), True)}',
             f'-grid_interpolation_method={grid_interp}',
-            f'-epw_dictionary_limits={str(params.get("limit_variables", True)).lower()}',
+            f'-epw_dictionary_limits={_cli_flag(params.get("limit_variables"), True)}',
             f'-solar_correction={solar_corr}',
             f'-diffuse_method={diffuse_method}',
             f'-uhi={uhi_val}',
@@ -1285,8 +1400,7 @@ class _MorphingWorkflowBase:
         params = self.inputs['fwg_params']
 
         def flag(key: str, default: bool) -> str:
-            value = params.get(key)
-            return _format_cli_value(default if value is None else bool(value))
+            return _cli_flag(params.get(key), default)
 
         command = [
             'java', '-jar', self.inputs['fwg_jar_path'],
@@ -1363,9 +1477,9 @@ class _MorphingWorkflowBase:
             temp_dir (str): The temporary directory containing the generated files.
         """
         search_dir = _generated_files_dir(temp_dir, self._current_cli_style())
-        logging.info(f"Processing generated files in: {search_dir}")
+        logger.info(f"Processing generated files in: {search_dir}")
         if not os.path.isdir(search_dir):
-            logging.warning(f"No generated files were found in '{search_dir}'.")
+            logger.warning(f"No generated files were found in '{search_dir}'.")
             return
 
         plan_for_this_epw = self.rename_plan.get(source_epw_path, {})
@@ -1380,9 +1494,9 @@ class _MorphingWorkflowBase:
             if ext.lower() not in allowed_extensions:
                 # Special mention for Analysis Files/Folders in V4 Global and V2 Europe
                 if generated_file.startswith(('00_', '01_', '02_', '03_', '04_')):
-                    logging.info(f"Analysis file/folder detected: '{generated_file}'. It will remain in the temporary directory.")
+                    logger.info(f"Analysis file/folder detected: '{generated_file}'. It will remain in the temporary directory.")
                 else:
-                    logging.info(f"Skipping auxiliary file: '{generated_file}'")
+                    logger.info(f"Skipping auxiliary file: '{generated_file}'")
                 continue
 
             destination_path = None
@@ -1400,16 +1514,16 @@ class _MorphingWorkflowBase:
 
             if destination_path is None:
                 if any(scenario in generated_file for scenario in self.tool_scenarios):
-                    logging.warning(f"Could not find a rename plan for file '{generated_file}'. It will be left in the temp directory.")
+                    logger.warning(f"Could not find a rename plan for file '{generated_file}'. It will be left in the temp directory.")
                 else:
                     # E.g., the present-day control or the corrected baseline of the FWG Engine.
-                    logging.info(f"'{generated_file}' is not a future scenario file. It will be left in the temp directory.")
+                    logger.info(f"'{generated_file}' is not a future scenario file. It will be left in the temp directory.")
             elif destination_path in moved_destinations:
-                logging.warning(f"Another generated file was already moved to '{destination_path}'. "
+                logger.warning(f"Another generated file was already moved to '{destination_path}'. "
                                 f"'{generated_file}' will be left in the temp directory.")
             else:
                 source_path = os.path.join(search_dir, generated_file)
-                logging.info(f"Moving '{source_path}' to '{destination_path}'")
+                logger.info(f"Moving '{source_path}' to '{destination_path}'")
                 shutil.move(source_path, destination_path)
                 moved_destinations.add(destination_path)
 
@@ -1487,19 +1601,19 @@ class MorphingWorkflowGlobal(_MorphingWorkflowBase):
                               fwg_params: Optional[Dict[str, Any]] = None,
                               # --- Explicit Global Tool Arguments ---
                               fwg_gcms: Optional[List[str]] = None,
-                              fwg_create_ensemble: bool = True,
-                              fwg_winter_sd_shift: float = 0.0,
-                              fwg_summer_sd_shift: float = 0.0,
-                              fwg_month_transition_hours: int = 72,
-                              fwg_use_multithreading: bool = True,
-                              fwg_interpolation_method_id: Union[int, str] = 0,
-                              fwg_limit_variables: bool = True,
-                              fwg_solar_hour_adjustment: Union[int, str] = 1,
-                              fwg_diffuse_irradiation_model: Union[int, str] = 1,
+                              fwg_create_ensemble: Optional[bool] = None,
+                              fwg_winter_sd_shift: Optional[float] = None,
+                              fwg_summer_sd_shift: Optional[float] = None,
+                              fwg_month_transition_hours: Optional[int] = None,
+                              fwg_use_multithreading: Optional[bool] = None,
+                              fwg_interpolation_method_id: Optional[Union[int, str]] = None,
+                              fwg_limit_variables: Optional[bool] = None,
+                              fwg_solar_hour_adjustment: Optional[Union[int, str]] = None,
+                              fwg_diffuse_irradiation_model: Optional[Union[int, str]] = None,
                               fwg_add_uhi: Optional[bool] = None,
-                              fwg_epw_original_lcz: int = 14,
-                              fwg_target_uhi_lcz: int = 1,
-                              fwg_output_type: str = 'EPW',
+                              fwg_epw_original_lcz: Optional[int] = None,
+                              fwg_target_uhi_lcz: Optional[int] = None,
+                              fwg_output_type: Optional[str] = None,
                               fwg_version: Optional[Union[str, int]] = None,
                               # --- FWG Engine Arguments (Global v5+) ---
                               fwg_scenarios: Optional[List[str]] = None,
@@ -1523,6 +1637,12 @@ class MorphingWorkflowGlobal(_MorphingWorkflowBase):
         The `output_filename_pattern` can now include placeholders for any FWG
         parameter (e.g., `{fwg_interpolation_method_id}`).
 
+        The explicit `fwg_` arguments default to None, which means that they are
+        not set: the value in `fwg_params` is used if present and, otherwise, the
+        default given below. Only the arguments that are passed override
+        `fwg_params`. Values such as 14.0 or 'False' (e.g., read from Excel) are
+        converted to the expected type (14 or False).
+
         The arguments of the FWG Engine (Global v5+) default to None, which
         keeps the default of the tool. They cannot be used with v3.x or v4.x.
 
@@ -1542,27 +1662,39 @@ class MorphingWorkflowGlobal(_MorphingWorkflowBase):
             fwg_show_tool_output (bool, optional): If True, prints the FWG
                 tool's console output in real-time. Defaults to False.
             fwg_params (Optional[Dict[str, Any]], optional): A dictionary for
-                base FWG parameters. Any explicit `fwg_` argument will
-                override this. Defaults to None.
+                base FWG parameters, with keys without the 'fwg_' prefix (e.g.,
+                {'winter_sd_shift': 1.0, 'gcms': ['CanESM5']}). Any explicit
+                `fwg_` argument that is passed will override this. Defaults to None.
             fwg_gcms (Optional[List[str]], optional): A specific list of GCMs
                 to use. If None, the full default list is used.
-            fwg_create_ensemble (bool, optional): If True, creates an ensemble.
-            fwg_winter_sd_shift (float, optional): Winter standard deviation shift.
-            fwg_summer_sd_shift (float, optional): Summer standard deviation shift.
-            fwg_month_transition_hours (int, optional): Hours for month transition.
-            fwg_use_multithreading (bool, optional): Use multithreading.
-            fwg_interpolation_method_id (int, optional): Interpolation method ID
-                or name. Global v5+ also accepts 4/'SCI', 5/'SGBI' and 6/'STBI'.
-            fwg_limit_variables (bool, optional): Limit variables to physical bounds.
-            fwg_solar_hour_adjustment (int, optional): Solar hour adjustment option.
-                Ignored by Global v5+.
-            fwg_diffuse_irradiation_model (int, optional): Diffuse irradiation model option.
+            fwg_create_ensemble (Optional[bool], optional): If True, creates an
+                ensemble. Defaults to True.
+            fwg_winter_sd_shift (Optional[float], optional): Winter standard
+                deviation shift. Defaults to 0.0.
+            fwg_summer_sd_shift (Optional[float], optional): Summer standard
+                deviation shift. Defaults to 0.0.
+            fwg_month_transition_hours (Optional[int], optional): Hours for month
+                transition. Defaults to 72.
+            fwg_use_multithreading (Optional[bool], optional): Use multithreading.
+                Defaults to True.
+            fwg_interpolation_method_id (Optional[Union[int, str]], optional):
+                Interpolation method ID or name. Defaults to 0 ('IDW'). Global
+                v5+ also accepts 4/'SCI', 5/'SGBI' and 6/'STBI'.
+            fwg_limit_variables (Optional[bool], optional): Limit variables to
+                physical bounds. Defaults to True.
+            fwg_solar_hour_adjustment (Optional[Union[int, str]], optional): Solar
+                hour adjustment option. Defaults to 1 ('By_Month'). Ignored by Global v5+.
+            fwg_diffuse_irradiation_model (Optional[Union[int, str]], optional):
+                Diffuse irradiation model option. Defaults to 1 ('Engerer_2015').
                 For Global v5+, use `fwg_decomposition_method` instead.
             fwg_add_uhi (Optional[bool], optional): Add UHI effect. If None, it is
                 applied with v3.x and v4.x. Global v5+ does not support UHI.
-            fwg_epw_original_lcz (int, optional): Original EPW LCZ.
-            fwg_target_uhi_lcz (int, optional): Target UHI LCZ.
-            fwg_output_type (str, optional): Output format (e.g., 'EPW', 'SPAIN_MET'). Defaults to 'EPW'.
+            fwg_epw_original_lcz (Optional[int], optional): Original EPW LCZ.
+                Defaults to 14.
+            fwg_target_uhi_lcz (Optional[int], optional): Target UHI LCZ.
+                Defaults to 1.
+            fwg_output_type (Optional[str], optional): Output format (e.g., 'EPW',
+                'SPAIN_MET'). Defaults to 'EPW'.
             fwg_version (Optional[Union[str, int]], optional): Version of the tool.
                 If None, it is detected from the JAR.
             fwg_scenarios (Optional[List[str]], optional): Subset of scenarios to
@@ -1710,19 +1842,19 @@ class MorphingWorkflowEurope(_MorphingWorkflowBase):
                               fwg_params: Optional[Dict[str, Any]] = None,
                               # --- Explicit Europe Tool Arguments ---
                               fwg_rcm_pairs: Optional[List[str]] = None,
-                              fwg_create_ensemble: bool = True,
-                              fwg_winter_sd_shift: float = 0.0,
-                              fwg_summer_sd_shift: float = 0.0,
-                              fwg_month_transition_hours: int = 72,
-                              fwg_use_multithreading: bool = True,
-                              fwg_interpolation_method_id: Union[int, str] = 0,
-                              fwg_limit_variables: bool = True,
-                              fwg_solar_hour_adjustment: Union[int, str] = 1,
-                              fwg_diffuse_irradiation_model: Union[int, str] = 1,
+                              fwg_create_ensemble: Optional[bool] = None,
+                              fwg_winter_sd_shift: Optional[float] = None,
+                              fwg_summer_sd_shift: Optional[float] = None,
+                              fwg_month_transition_hours: Optional[int] = None,
+                              fwg_use_multithreading: Optional[bool] = None,
+                              fwg_interpolation_method_id: Optional[Union[int, str]] = None,
+                              fwg_limit_variables: Optional[bool] = None,
+                              fwg_solar_hour_adjustment: Optional[Union[int, str]] = None,
+                              fwg_diffuse_irradiation_model: Optional[Union[int, str]] = None,
                               fwg_add_uhi: Optional[bool] = None,
-                              fwg_epw_original_lcz: int = 14,
-                              fwg_target_uhi_lcz: int = 1,
-                              fwg_output_type: str = 'EPW',
+                              fwg_epw_original_lcz: Optional[int] = None,
+                              fwg_target_uhi_lcz: Optional[int] = None,
+                              fwg_output_type: Optional[str] = None,
                               fwg_version: Optional[Union[str, int]] = None,
                               # --- FWG Engine Arguments (Europe v3+) ---
                               fwg_scenarios: Optional[List[str]] = None,
@@ -1746,6 +1878,11 @@ class MorphingWorkflowEurope(_MorphingWorkflowBase):
         The `output_filename_pattern` can now include placeholders for any FWG
         parameter (e.g., `{fwg_interpolation_method_id}`).
 
+        The explicit `fwg_` arguments default to None, which means that they are
+        not set: the value in `fwg_params` is used if present and, otherwise, the
+        default given below. Only the arguments that are passed override
+        `fwg_params`.
+
         The arguments of the FWG Engine (Europe v3+) default to None, which
         keeps the default of the tool. They cannot be used with v1.x or v2.x.
 
@@ -1765,27 +1902,39 @@ class MorphingWorkflowEurope(_MorphingWorkflowBase):
             fwg_show_tool_output (bool, optional): If True, prints the FWG
                 tool's console output in real-time. Defaults to False.
             fwg_params (Optional[Dict[str, Any]], optional): A dictionary for
-                base FWG parameters. Any explicit `fwg_` argument will
-                override this. Defaults to None.
+                base FWG parameters, with keys without the 'fwg_' prefix (e.g.,
+                {'winter_sd_shift': 1.0, 'rcm_pairs': [...]}). Any explicit
+                `fwg_` argument that is passed will override this. Defaults to None.
             fwg_rcm_pairs (Optional[List[str]], optional): A specific list of
                 GCM-RCM pairs to use. If None, the full default list is used.
-            fwg_create_ensemble (bool, optional): If True, creates an ensemble.
-            fwg_winter_sd_shift (float, optional): Winter standard deviation shift.
-            fwg_summer_sd_shift (float, optional): Summer standard deviation shift.
-            fwg_month_transition_hours (int, optional): Hours for month transition.
-            fwg_use_multithreading (bool, optional): Use multithreading.
-            fwg_interpolation_method_id (int, optional): Interpolation method ID
-                or name. Europe v3+ also accepts 4/'SCI', 5/'SGBI' and 6/'STBI'.
-            fwg_limit_variables (bool, optional): Limit variables to physical bounds.
-            fwg_solar_hour_adjustment (int, optional): Solar hour adjustment option.
-                Ignored by Europe v3+.
-            fwg_diffuse_irradiation_model (int, optional): Diffuse irradiation model option.
+            fwg_create_ensemble (Optional[bool], optional): If True, creates an
+                ensemble. Defaults to True.
+            fwg_winter_sd_shift (Optional[float], optional): Winter standard
+                deviation shift. Defaults to 0.0.
+            fwg_summer_sd_shift (Optional[float], optional): Summer standard
+                deviation shift. Defaults to 0.0.
+            fwg_month_transition_hours (Optional[int], optional): Hours for month
+                transition. Defaults to 72.
+            fwg_use_multithreading (Optional[bool], optional): Use multithreading.
+                Defaults to True.
+            fwg_interpolation_method_id (Optional[Union[int, str]], optional):
+                Interpolation method ID or name. Defaults to 0 ('IDW'). Europe
+                v3+ also accepts 4/'SCI', 5/'SGBI' and 6/'STBI'.
+            fwg_limit_variables (Optional[bool], optional): Limit variables to
+                physical bounds. Defaults to True.
+            fwg_solar_hour_adjustment (Optional[Union[int, str]], optional): Solar
+                hour adjustment option. Defaults to 1 ('By_Month'). Ignored by Europe v3+.
+            fwg_diffuse_irradiation_model (Optional[Union[int, str]], optional):
+                Diffuse irradiation model option. Defaults to 1 ('Engerer_2015').
                 For Europe v3+, use `fwg_decomposition_method` instead.
             fwg_add_uhi (Optional[bool], optional): Add UHI effect. If None, it is
                 applied with v1.x and v2.x. Europe v3+ does not support UHI.
-            fwg_epw_original_lcz (int, optional): Original EPW LCZ.
-            fwg_target_uhi_lcz (int, optional): Target UHI LCZ.
-            fwg_output_type (str, optional): Output format (e.g., 'EPW', 'SPAIN_MET'). Defaults to 'EPW'.
+            fwg_epw_original_lcz (Optional[int], optional): Original EPW LCZ.
+                Defaults to 14.
+            fwg_target_uhi_lcz (Optional[int], optional): Target UHI LCZ.
+                Defaults to 1.
+            fwg_output_type (Optional[str], optional): Output format (e.g., 'EPW',
+                'SPAIN_MET'). Defaults to 'EPW'.
             fwg_version (Optional[Union[str, int]], optional): Version of the tool.
                 If None, it is detected from the JAR.
             (The FWG Engine arguments `fwg_scenarios` to `fwg_extra_args` are
@@ -1907,9 +2056,9 @@ class MorphingWorkflowCordex(_MorphingWorkflowBase):
             return super()._engine_capabilities(fwg_jar_path, distribution_info)
         if self.cordex_domain in CORDEX_REGIONS:
             region = CORDEX_REGIONS[self.cordex_domain]
-            logging.info(f"CORDEX domain detected from the JAR filename: {self.cordex_domain} ({region['name']}).")
+            logger.info(f"CORDEX domain detected from the JAR filename: {self.cordex_domain} ({region['name']}).")
             return list(region['scenarios']), set(region['rcm_pairs']), list(ALL_POSSIBLE_YEARS)
-        logging.warning(
+        logger.warning(
             f"Could not identify the CORDEX domain of '{os.path.basename(fwg_jar_path)}'. Scenarios and GCM-RCM "
             f"pairs are validated against all regions; the tool will report any unavailable option.")
         return list(CORDEX_SCENARIOS), set(DEFAULT_CORDEX_RCMS), list(ALL_POSSIBLE_YEARS)
@@ -1926,14 +2075,14 @@ class MorphingWorkflowCordex(_MorphingWorkflowBase):
                               fwg_params: Optional[Dict[str, Any]] = None,
                               # --- Explicit CORDEX Tool Arguments ---
                               fwg_rcm_pairs: Optional[List[str]] = None,
-                              fwg_create_ensemble: bool = True,
-                              fwg_winter_sd_shift: float = 0.0,
-                              fwg_summer_sd_shift: float = 0.0,
-                              fwg_month_transition_hours: int = 72,
-                              fwg_use_multithreading: bool = True,
-                              fwg_interpolation_method_id: Union[int, str] = 0,
-                              fwg_limit_variables: bool = True,
-                              fwg_output_type: str = 'EPW',
+                              fwg_create_ensemble: Optional[bool] = None,
+                              fwg_winter_sd_shift: Optional[float] = None,
+                              fwg_summer_sd_shift: Optional[float] = None,
+                              fwg_month_transition_hours: Optional[int] = None,
+                              fwg_use_multithreading: Optional[bool] = None,
+                              fwg_interpolation_method_id: Optional[Union[int, str]] = None,
+                              fwg_limit_variables: Optional[bool] = None,
+                              fwg_output_type: Optional[str] = None,
                               fwg_version: Optional[Union[str, int]] = None,
                               fwg_scenarios: Optional[List[str]] = None,
                               fwg_timeframes: Optional[List[Union[int, str]]] = None,
@@ -1954,6 +2103,15 @@ class MorphingWorkflowCordex(_MorphingWorkflowBase):
         then generates a detailed "dry run" plan of the final filenames for user
         review. Only the scenarios available in the region are planned.
 
+        Only FWG Engine distributions are accepted: the CORDEX regional
+        distributions and Europe v3+. For Europe v1.x and v2.x, use
+        `MorphingWorkflowEurope`.
+
+        The explicit `fwg_` arguments default to None, which means that they are
+        not set: the value in `fwg_params` is used if present and, otherwise, the
+        default given below. Only the arguments that are passed override
+        `fwg_params`.
+
         Args:
             final_output_dir (str): The path for the final output files.
             output_filename_pattern (str): The template for final filenames.
@@ -1971,22 +2129,29 @@ class MorphingWorkflowCordex(_MorphingWorkflowBase):
             fwg_show_tool_output (bool, optional): If True, prints the FWG
                 tool's console output in real-time. Defaults to False.
             fwg_params (Optional[Dict[str, Any]], optional): A dictionary for
-                base FWG parameters. Any explicit `fwg_` argument will
-                override this. Defaults to None.
+                base FWG parameters, with keys without the 'fwg_' prefix (e.g.,
+                {'winter_sd_shift': 1.0, 'rcm_pairs': [...]}). Any explicit
+                `fwg_` argument that is passed will override this. Defaults to None.
             fwg_rcm_pairs (Optional[List[str]], optional): A specific list of
                 GCM-RCM pairs of the region. If None, the tool uses all of them.
-            fwg_create_ensemble (bool, optional): If True, creates an ensemble
-                (it requires at least two GCM-RCM pairs).
-            fwg_winter_sd_shift (float, optional): Winter standard deviation shift.
-            fwg_summer_sd_shift (float, optional): Summer standard deviation shift.
-            fwg_month_transition_hours (int, optional): Hours for month transition.
-            fwg_use_multithreading (bool, optional): Use multithreading.
-            fwg_interpolation_method_id (Union[int, str], optional): Interpolation
-                method ID or name (0/'IDW', 2/'AVG4P', 3/'NP', 4/'SCI', 5/'SGBI',
-                6/'STBI'). 'BI' requires rectilinear grids, which the CORDEX
-                regions do not use.
-            fwg_limit_variables (bool, optional): Limit variables to physical bounds.
-            fwg_output_type (str, optional): Output format (e.g., 'EPW', 'SPAIN_MET'). Defaults to 'EPW'.
+            fwg_create_ensemble (Optional[bool], optional): If True, creates an
+                ensemble (it requires at least two GCM-RCM pairs). Defaults to True.
+            fwg_winter_sd_shift (Optional[float], optional): Winter standard
+                deviation shift. Defaults to 0.0.
+            fwg_summer_sd_shift (Optional[float], optional): Summer standard
+                deviation shift. Defaults to 0.0.
+            fwg_month_transition_hours (Optional[int], optional): Hours for month
+                transition. Defaults to 72.
+            fwg_use_multithreading (Optional[bool], optional): Use multithreading.
+                Defaults to True.
+            fwg_interpolation_method_id (Optional[Union[int, str]], optional):
+                Interpolation method ID or name (0/'IDW', 2/'AVG4P', 3/'NP',
+                4/'SCI', 5/'SGBI', 6/'STBI'). Defaults to 0 ('IDW'). 'BI'
+                requires rectilinear grids, which the CORDEX regions do not use.
+            fwg_limit_variables (Optional[bool], optional): Limit variables to
+                physical bounds. Defaults to True.
+            fwg_output_type (Optional[str], optional): Output format (e.g., 'EPW',
+                'SPAIN_MET'). Defaults to 'EPW'.
             fwg_version (Optional[Union[str, int]], optional): Version of the tool.
                 If None, it is detected from the JAR.
             (The FWG Engine arguments `fwg_scenarios` to `fwg_extra_args` are
@@ -2012,12 +2177,13 @@ class MorphingWorkflowCordex(_MorphingWorkflowBase):
             fwg_use_multithreading=fwg_use_multithreading,
             fwg_interpolation_method_id=fwg_interpolation_method_id,
             fwg_limit_variables=fwg_limit_variables,
-            # Options of older tools that the FWG Engine does not use.
-            fwg_solar_hour_adjustment=1,
-            fwg_diffuse_irradiation_model=1,
-            fwg_add_uhi=False,
-            fwg_epw_original_lcz=14,
-            fwg_target_uhi_lcz=1,
+            # Options of older tools that the FWG Engine does not use. Their values
+            # in fwg_params (if any) are handled as in the other workflows.
+            fwg_solar_hour_adjustment=None,
+            fwg_diffuse_irradiation_model=None,
+            fwg_add_uhi=None,
+            fwg_epw_original_lcz=None,
+            fwg_target_uhi_lcz=None,
             fwg_output_type=fwg_output_type,
             fwg_version=fwg_version,
             fwg_scenarios=fwg_scenarios,
