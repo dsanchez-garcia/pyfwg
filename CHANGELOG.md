@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Tutorial Notebooks**: The paths to the JAR files are built from a single configuration cell at the top of each notebook (`FWG_JAR_DIR`, which can also be set with an environment variable), instead of being hardcoded in several cells.
+
+### Fixed
+- The tutorial notebooks showed absolute paths of the computer where they were run, including the user name, in their code and saved outputs. The saved outputs now show the `<FWG_JAR_DIR>`, `<TEMP>` and `<HOME>` placeholders instead.
+
 ## [0.4.0] - 2026-10-17
 
 ### Added
