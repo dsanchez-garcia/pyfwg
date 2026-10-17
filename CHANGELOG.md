@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - The tutorial notebooks showed absolute paths of the computer where they were run, including the user name, in their code and saved outputs. The saved outputs now show the `<FWG_JAR_DIR>`, `<TEMP>` and `<HOME>` placeholders instead.
+- The code cells of the tutorials were not highlighted in the documentation, because the `ipython3` Pygments lexer was not installed. The `docs` extra now includes `ipython`.
 
 ## [0.4.0] - 2026-10-17
 

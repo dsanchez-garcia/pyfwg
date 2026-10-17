@@ -99,6 +99,9 @@ setup(
             "sphinx",
             "sphinx-rtd-theme",
             "nbsphinx",
+            # Provides the 'ipython3' Pygments lexer that nbsphinx uses to highlight the code
+            # cells of the tutorial notebooks.
+            "ipython",
         ],
     },
 )
