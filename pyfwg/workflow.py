@@ -1662,7 +1662,7 @@ class MorphingWorkflowGlobal(_MorphingWorkflowBase):
             fwg_show_tool_output (bool, optional): If True, prints the FWG
                 tool's console output in real-time. Defaults to False.
             fwg_params (Optional[Dict[str, Any]], optional): A dictionary for
-                base FWG parameters, with keys without the 'fwg_' prefix (e.g.,
+                base FWG parameters, with keys without the `fwg_` prefix (e.g.,
                 {'winter_sd_shift': 1.0, 'gcms': ['CanESM5']}). Any explicit
                 `fwg_` argument that is passed will override this. Defaults to None.
             fwg_gcms (Optional[List[str]], optional): A specific list of GCMs
@@ -1902,7 +1902,7 @@ class MorphingWorkflowEurope(_MorphingWorkflowBase):
             fwg_show_tool_output (bool, optional): If True, prints the FWG
                 tool's console output in real-time. Defaults to False.
             fwg_params (Optional[Dict[str, Any]], optional): A dictionary for
-                base FWG parameters, with keys without the 'fwg_' prefix (e.g.,
+                base FWG parameters, with keys without the `fwg_` prefix (e.g.,
                 {'winter_sd_shift': 1.0, 'rcm_pairs': [...]}). Any explicit
                 `fwg_` argument that is passed will override this. Defaults to None.
             fwg_rcm_pairs (Optional[List[str]], optional): A specific list of
@@ -2129,7 +2129,7 @@ class MorphingWorkflowCordex(_MorphingWorkflowBase):
             fwg_show_tool_output (bool, optional): If True, prints the FWG
                 tool's console output in real-time. Defaults to False.
             fwg_params (Optional[Dict[str, Any]], optional): A dictionary for
-                base FWG parameters, with keys without the 'fwg_' prefix (e.g.,
+                base FWG parameters, with keys without the `fwg_` prefix (e.g.,
                 {'winter_sd_shift': 1.0, 'rcm_pairs': [...]}). Any explicit
                 `fwg_` argument that is passed will override this. Defaults to None.
             fwg_rcm_pairs (Optional[List[str]], optional): A specific list of
