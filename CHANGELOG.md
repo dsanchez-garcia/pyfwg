@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-17
+
 ### Added
 - **Support for the FWG Engine distributions**: The latest Future Weather Generator distributions share a common engine (FWG Engine v1.x) with a new command line. `MorphingWorkflowGlobal`/`morph_epw_global` now support **Global v5.x** (FWG CMIP6 Global) and `MorphingWorkflowEurope`/`morph_epw_europe` support **Europe v3.x** (FWG CORDEX-CMIP5 Europe EUR-11). `pyfwg` builds the new command (`-g` action and organized output layout) and collects the weather files from the `weather` subfolder written by the engine.
 - **CORDEX Regional Distributions**: Added the `MorphingWorkflowCordex` class and the `morph_epw_cordex` function for the CORDEX-CMIP5 regional distributions (Middle East and North Africa MNA-22, Africa AFR-22, North America NAM-44, Central America CAM-44, South America SAM-44, West & South Asia WAS-22, Southeast Asia SEA-22 and Australasia AUS-22). The region is identified from the JAR and only its scenarios and GCM-RCM pairs are accepted. Added the `CORDEX_REGIONS`, `CORDEX_SCENARIOS` and `DEFAULT_CORDEX_RCMS` constants.
@@ -104,8 +106,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Initial bug fixes and improvements to the first public release.
 
-[Unreleased]: https://github.com/dsanchez-garcia/pyfwg/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/dsanchez-garcia/pyfwg/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/dsanchez-garcia/pyfwg/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/dsanchez-garcia/pyfwg/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/dsanchez-garcia/pyfwg/compare/v0.2.0...v0.2.1
-[0.2.0]: https://github.com/dsanchez-garcia/pyfwg/compare/v0.1.1...v0.2.0
-[0.1.1]: https://github.com/dsanchez-garcia/pyfwg/releases/tag/v0.1.1
+[0.2.0]: https://github.com/dsanchez-garcia/pyfwg/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/dsanchez-garcia/pyfwg/releases/tag/v0.1.0
