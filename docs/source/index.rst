@@ -35,7 +35,7 @@ Before using `pyfwg`, you need to have the following installed and configured:
 * **Future Weather Generator**: You must download the appropriate ``.jar`` file from the `official website <https://future-weather-generator.adai.pt/>`_.
     * The **Global Tool** (``FutureWeatherGenerator_vX.X.X.jar``) has been tested with versions **v3.0.0**, **v3.0.1**, and **v4.0.2**.
     * The **Europe Tool** (``FutureWeatherGenerator_Europe_vX.X.X.jar``) has been tested with versions **v1.0.1** and **v2.0.2**.
-    * The **FWG Engine distributions** (``FutureWeatherGenerator-CMIP6-Global-v5.X.X.jar``, ``FutureWeatherGenerator-CORDEX-CMIP5-Europe-EUR-11-v3.X.X.jar`` and the CORDEX regional ``FutureWeatherGenerator-CORDEX-CMIP5-<Region>-<Domain>-v1.X.X.jar``) are supported according to the command-line interface of FWG Engine v1.0 and v1.1.
+    * The **FWG Engine distributions** have been tested with **Global v5.2.0** (``FutureWeatherGenerator-CMIP6-Global-v5.2.0.jar``, FWG Engine v1.1.0). Europe v3.x (``FutureWeatherGenerator-CORDEX-CMIP5-Europe-EUR-11-v3.X.X.jar``) and the CORDEX regional distributions (``FutureWeatherGenerator-CORDEX-CMIP5-<Region>-<Domain>-v1.X.X.jar``) share the same engine and command-line interface.
 
 Acknowledgements
 ----------------

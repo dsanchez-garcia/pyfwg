@@ -491,13 +491,15 @@ def test_morph_epw_cordex(mock_makedirs, mock_exists, mock_rmtree, mock_workflow
 
 def test_run_direct_morphing_engine(temp_epw, tmp_path):
     """
-    The simple API moves the files of the 'weather' subfolder (FWG Engine) and
-    never the copy of the input EPW file.
+    The simple API moves the scenario files of the 'weather' subfolder (FWG
+    Engine). The copy of the input EPW file and the baseline processed by the
+    engine are not moved.
     """
     temp_base = tmp_path / "temp"
     workflow = MagicMock()
     workflow.is_config_valid = True
     workflow.epws_to_be_morphed = [temp_epw]
+    workflow.rename_plan = {temp_epw: {"ssp245_2050.epw": str(tmp_path / "out" / "ssp245_2050.epw")}}
     workflow.inputs = {
         'temp_base_dir': str(temp_base),
         'fwg_params': {'add_uhi': False, 'output_type': 'EPW'},
@@ -519,7 +521,6 @@ def test_run_direct_morphing_engine(temp_epw, tmp_path):
     assert sorted(os.path.basename(path) for path in results) == [
         "ESP_Andalucia_Sevilla_Ensemble_ssp245_2050.epw",
         "ESP_Andalucia_Sevilla_Ensemble_ssp245_2050.stat",
-        "ESP_Andalucia_Sevilla_SolarQC_corrected.epw",
     ]
 
 

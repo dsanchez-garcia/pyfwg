@@ -21,8 +21,8 @@ def _run_direct_morphing(workflow, output_dir: str) -> List[str]:
 
     This is the shared engine of the simple API functions. For each EPW file,
     it validates the Local Climate Zones (if the UHI effect is enabled), runs
-    the tool and moves the generated weather and .stat files to `output_dir`
-    with the default filenames produced by the tool.
+    the tool and moves the generated weather and .stat files of each future
+    scenario to `output_dir` with the default filenames produced by the tool.
 
     Args:
         workflow: A workflow instance on which `configure_and_preview` has been run.
@@ -79,9 +79,15 @@ def _run_direct_morphing(workflow, output_dir: str) -> List[str]:
             # FWG Engine distributions write the weather files to a 'weather' subfolder.
             generated_files_dir = _generated_files_dir(temp_epw_output_dir, workflow.inputs.get('fwg_cli_style'))
             extensions = _weather_file_extensions(fwg_params.get('output_type'))
+            # Only the files of the planned scenarios and years (e.g., 'ssp245_2050') are
+            # moved. Other weather files, such as the baseline processed by the FWG
+            # Engine, remain in the temporary directory.
+            scenario_keys = [os.path.splitext(key)[0] for key in workflow.rename_plan.get(epw_path, {})]
             for generated_file in os.listdir(generated_files_dir):
                 # Skip the copy of the input EPW file made for the tool.
                 if generated_file == os.path.basename(epw_path):
+                    continue
+                if scenario_keys and not any(key in generated_file for key in scenario_keys):
                     continue
                 if generated_file.lower().endswith(extensions):
                     source_path = os.path.join(generated_files_dir, generated_file)
@@ -304,9 +310,11 @@ def morph_epw_global(*,
     parameters before execution and runs the entire workflow in a single call.
     It supports Global v3.x, v4.x and v5+ (FWG Engine).
 
-    The generated weather (.epw, .met or .csv) and .stat files are saved
-    directly to the output directory using the default filenames produced by
-    the FWG tool. This function does not perform custom renaming.
+    The generated weather (.epw, .met or .csv) and .stat files of each future
+    scenario are saved directly to the output directory using the default
+    filenames produced by the FWG tool. This function does not perform custom
+    renaming. Other files produced by the tool (e.g., the baseline processed by
+    the FWG Engine, reports or logs) remain in the temporary directory.
 
     Args:
         epw_paths (Union[str, List[str]]): A single path or a list of paths
@@ -602,9 +610,11 @@ def morph_epw_europe(*,
     parameters before execution and runs the entire workflow in a single call.
     It supports Europe v1.x, v2.x and v3+ (FWG Engine).
 
-    The generated weather (.epw, .met or .csv) and .stat files are saved
-    directly to the output directory using the default filenames produced by
-    the FWG tool. This function does not perform custom renaming.
+    The generated weather (.epw, .met or .csv) and .stat files of each future
+    scenario are saved directly to the output directory using the default
+    filenames produced by the FWG tool. This function does not perform custom
+    renaming. Other files produced by the tool (e.g., the baseline processed by
+    the FWG Engine, reports or logs) remain in the temporary directory.
 
     Args:
         epw_paths (Union[str, List[str]]): A single path or a list of paths
@@ -738,9 +748,11 @@ def morph_epw_cordex(*,
     uses the `MorphingWorkflowCordex` class, which identifies the region of the
     JAR and validates the scenarios and GCM-RCM pairs against it.
 
-    The generated weather (.epw, .met or .csv) and .stat files are saved
-    directly to the output directory using the default filenames produced by
-    the FWG tool. This function does not perform custom renaming.
+    The generated weather (.epw, .met or .csv) and .stat files of each future
+    scenario are saved directly to the output directory using the default
+    filenames produced by the FWG tool. This function does not perform custom
+    renaming. Other files produced by the tool (e.g., the baseline processed by
+    the FWG Engine, reports or logs) remain in the temporary directory.
 
     Args:
         epw_paths (Union[str, List[str]]): A single path or a list of paths

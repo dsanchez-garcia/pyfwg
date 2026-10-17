@@ -27,7 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Global v4 / Europe v2 Commands**: `fwg_limit_variables` is now passed to the tool (`-epw_dictionary_limits`); it was previously ignored. The default list of models is passed in a deterministic (sorted) order.
 
 ### Fixed
-- The simple API functions no longer move the temporary copy of the input EPW file to the output folder, and they now move the `.met` and `.csv` weather files of the `SPAIN_MET` and `PORTUGAL_CSV` output types.
+- The simple API functions no longer move the temporary copy of the input EPW file to the output folder, and they now move the `.met` and `.csv` weather files of the `SPAIN_MET` and `PORTUGAL_CSV` output types. Only the files of the future scenarios are moved; other weather files (e.g., the baseline processed by the FWG Engine) remain in the temporary directory.
 - Only the weather and `.stat` files of the selected output type are renamed, and a generated file is no longer silently overwritten when several files map to the same final name (the first one is kept and a warning is logged).
 - A run of the tool that exceeds the time limit is reported as failed instead of stopping the whole workflow.
 - `check_lcz_availability` logs unexpected errors instead of failing silently.
