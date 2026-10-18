@@ -13,7 +13,9 @@ import pytest
 import numpy as np
 import pandas as pd
 import subprocess
+from pathlib import Path
 from unittest.mock import MagicMock, patch
+import pyfwg
 from pyfwg.utils import (
     detect_fwg_version,
     _robust_rmtree,
@@ -69,10 +71,10 @@ def test_copy_tutorials(mock_copy2, mock_makedirs, mock_as_file, mock_files):
     Test the copying of tutorial notebook files from the package to a user-defined folder.
     We mock the 'importlib.resources' internal calls to simulate finding files inside the package.
     """
-    # Simulate a package structure with one file named 'test_item.ipynb'
+    # Simulate a tutorials folder with one file named 'test_item.ipynb'
     mock_item = MagicMock()
     mock_item.name = "test_item.ipynb"
-    mock_files.return_value.iterdir.return_value = [mock_item]
+    mock_files.return_value.joinpath.return_value.iterdir.return_value = [mock_item]
     
     # Simulate the source path where the package file resides
     mock_as_file.return_value.__enter__.return_value = "/mock/source/test_item.ipynb"
@@ -81,9 +83,46 @@ def test_copy_tutorials(mock_copy2, mock_makedirs, mock_as_file, mock_files):
     with patch("os.path.isdir", return_value=False):
         copy_tutorials("/mock/dest")
     
+    # The tutorials folder is looked up from the pyfwg package, because Python 3.9 does not
+    # support namespace packages such as 'pyfwg.tutorials' in resources.files
+    mock_files.assert_called_once_with("pyfwg")
+    mock_files.return_value.joinpath.assert_called_once_with("tutorials")
     # Verify the utility creates the destination folder and copies the file
     mock_makedirs.assert_called_once_with("/mock/dest", exist_ok=True)
     mock_copy2.assert_called_once()
+
+def test_copy_tutorials_copies_the_bundled_files(tmp_path):
+    """
+    Test the copying of the real tutorial files: the notebooks, the Excel files and the EPW
+    folders. On Python 3.9, copy_tutorials raised a TypeError because the tutorials folder,
+    which has no __init__.py, was looked up as a namespace package.
+    """
+    source_dir = Path(pyfwg.__file__).parent / "tutorials"
+    dest_dir = tmp_path / "pyfwg_tutorials"
+
+    copy_tutorials(str(dest_dir))
+
+    # Same patterns as the package_data of setup.py
+    for pattern in ("*.ipynb", "*.xlsx", "epws/w_pattern/*.epw", "epws/wo_pattern/*.epw"):
+        source_files = sorted(source_dir.glob(pattern))
+        assert source_files, f"There are no {pattern} files in {source_dir}"
+        for source_file in source_files:
+            copied_file = dest_dir / source_file.relative_to(source_dir)
+            assert copied_file.is_file(), copied_file
+            assert copied_file.read_bytes() == source_file.read_bytes(), copied_file
+
+def test_copy_tutorials_without_the_tutorials_folder(tmp_path, caplog):
+    """
+    If the package has no tutorials folder, copy_tutorials logs an error and copies nothing.
+    """
+    dest_dir = tmp_path / "pyfwg_tutorials"
+    # Simulate a pyfwg package folder without the tutorials folder
+    with patch("pyfwg.utils.resources.files", return_value=tmp_path / "pyfwg"):
+        with caplog.at_level(logging.ERROR, logger="pyfwg"):
+            copy_tutorials(str(dest_dir))
+
+    assert "Could not find the tutorials folder" in caplog.text
+    assert not dest_dir.exists()
 
 def test_uhi_morph_v4_style():
     """

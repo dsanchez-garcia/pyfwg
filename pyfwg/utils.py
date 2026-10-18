@@ -66,16 +66,15 @@ def copy_tutorials(dest_dir: str = './pyfwg_tutorials'):
             the tutorials and data will be copied. Defaults to './pyfwg_tutorials'
             in the current working directory.
     """
-    # Define the source sub-package containing the tutorials.
-    source_package = 'pyfwg.tutorials'
+    # Use `importlib.resources.files` to get a traversable object
+    # representing the `tutorials` folder. The folder has no `__init__.py`
+    # (it is package data, not a sub-package), so it is reached from the
+    # `pyfwg` package: Python 3.9 does not support namespace packages in
+    # `resources.files('pyfwg.tutorials')` and raises a TypeError.
+    source_path_obj = resources.files('pyfwg').joinpath('tutorials')
 
-    try:
-        # Use `importlib.resources.files` to get a traversable object
-        # representing the source package. This is the modern and robust
-        # way to access package data.
-        source_path_obj = resources.files(source_package)
-    except (ModuleNotFoundError, AttributeError):
-        logger.error(f"Could not find the tutorials sub-package '{source_package}'. The package might be corrupted.")
+    if not source_path_obj.is_dir():
+        logger.error("Could not find the tutorials folder of pyfwg. The package might be corrupted.")
         return
 
     # Create the destination directory if it doesn't already exist.
