@@ -1,0 +1,54 @@
+# .github/workflows/tests.yml
+# Runs the test suite on the Python versions supported by pyfwg (the classifiers of setup.py),
+# on Linux and Windows.
+
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  # Cancels the previous run of a pull request when it is updated. head_ref is only set for
+  # pull requests, so every push to main gets its own run.
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    name: Python ${{ matrix.python-version }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      # Run every combination, to see which Python versions and systems a failure affects.
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
+    defaults:
+      run:
+        # Also on Windows, so that a failing command stops the step.
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: setup.py
+
+      - name: Install pyfwg and the test dependencies
+        # nbformat is needed by the schema test of the tutorial notebooks, which is skipped without it.
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install . pytest nbformat
+
+      - name: Run the tests
+        # The JAR files of the Future Weather Generator are not needed: the tests build synthetic
+        # JARs (tests/conftest.py) and mock the calls to Java.
+        run: python -m pytest tests -ra
