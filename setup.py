@@ -61,10 +61,12 @@ setup(
         "Intended Audience :: Science/Research",
         "Operating System :: OS Independent",
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
+        "Programming Language :: Python :: 3.12",
+        "Programming Language :: Python :: 3.13",
+        "Programming Language :: Python :: 3.14",
         "Topic :: Scientific/Engineering",
     ],
 
@@ -87,7 +89,6 @@ setup(
     # --- Dependencies and Requirements ---
     python_requires=">=3.9",
     install_requires=[
-        'importlib_resources; python_version<"3.9"',
         'pandas',
         # Needed by pandas to read and write the Excel files of export_template_to_excel
         # and load_runs_from_excel.

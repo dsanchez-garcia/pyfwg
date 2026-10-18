@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Tutorial Notebooks**: The paths to the JAR files are built from a single configuration cell at the top of each notebook (`FWG_JAR_DIR`, which can also be set with an environment variable), instead of being hardcoded in several cells.
 
 ### Fixed
+- The package metadata listed Python 3.8, which pyfwg does not support (it requires Python 3.9 or later), and no version after Python 3.11. The classifiers now list Python 3.9 to 3.14, the versions tested by the continuous integration. The unused `importlib_resources` requirement for Python 3.8 and older was removed.
 - The tutorial notebooks showed absolute paths of the computer where they were run, including the user name, in their code and saved outputs. The saved outputs now show the `<FWG_JAR_DIR>`, `<TEMP>` and `<HOME>` placeholders instead.
 - The code cells of the tutorials were not highlighted in the documentation, because the `ipython3` Pygments lexer was not installed. The `docs` extra now includes `ipython`.
 
