@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Continuous Integration**: A GitHub Actions workflow runs the tests on Python 3.9 to 3.14, on Linux and Windows, for every pull request and every push to `main`.
+
 ### Changed
 - **Tutorial Notebooks**: The paths to the JAR files are built from a single configuration cell at the top of each notebook (`FWG_JAR_DIR`, which can also be set with an environment variable), instead of being hardcoded in several cells.
 
