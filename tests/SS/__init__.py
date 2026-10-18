@@ -1,3 +1,0 @@
-"""
-Testing package for pyfwg.
-"""
