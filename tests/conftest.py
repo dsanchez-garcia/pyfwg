@@ -5,20 +5,28 @@ import pytest
 
 @pytest.fixture
 def fwg_jars():
-    return {
-        "EUROPE_V1": r"D:\OneDrive - Universidad de Cádiz (uca.es)\Programas\FutureWeatherGenerator_Europe_v1.0.1.jar",
-        "EUROPE_V2": r"D:\OneDrive - Universidad de Cádiz (uca.es)\Programas\FutureWeatherGenerator_Europe_v2.0.2.jar",
-        "GLOBAL_V3": r"D:\OneDrive - Universidad de Cádiz (uca.es)\Programas\FutureWeatherGenerator_v3.0.1.jar",
-        "GLOBAL_V4": r"D:\OneDrive - Universidad de Cádiz (uca.es)\Programas\FutureWeatherGenerator_v4.0.2.jar",
+    """
+    Paths to the JAR files of the Future Weather Generator, in the folder given by the
+    FWG_JAR_DIR environment variable (as in the tutorial notebooks). When it is not set,
+    only the filenames are returned.
+    """
+    jar_dir = os.environ.get("FWG_JAR_DIR", "")
+    filenames = {
+        "EUROPE_V1": "FutureWeatherGenerator_Europe_v1.0.1.jar",
+        "EUROPE_V2": "FutureWeatherGenerator_Europe_v2.0.2.jar",
+        "GLOBAL_V3": "FutureWeatherGenerator_v3.0.1.jar",
+        "GLOBAL_V4": "FutureWeatherGenerator_v4.0.2.jar",
         # FWG Engine distributions
-        "GLOBAL_V5": r"D:\OneDrive - Universidad de Cádiz (uca.es)\Programas\FutureWeatherGenerator-CMIP6-Global-v5.2.0.jar",
-        "EUROPE_V3": r"D:\OneDrive - Universidad de Cádiz (uca.es)\Programas\FutureWeatherGenerator-CORDEX-CMIP5-Europe-EUR-11-v3.2.0.jar",
-        "CORDEX_NAM": r"D:\OneDrive - Universidad de Cádiz (uca.es)\Programas\FutureWeatherGenerator-CORDEX-CMIP5-North-America-NAM-44-v1.2.0.jar",
+        "GLOBAL_V5": "FutureWeatherGenerator-CMIP6-Global-v5.2.0.jar",
+        "EUROPE_V3": "FutureWeatherGenerator-CORDEX-CMIP5-Europe-EUR-11-v3.2.0.jar",
+        "CORDEX_NAM": "FutureWeatherGenerator-CORDEX-CMIP5-North-America-NAM-44-v1.2.0.jar",
     }
+    return {key: os.path.join(jar_dir, filename) for key, filename in filenames.items()}
 
 @pytest.fixture
 def real_epws():
-    base_dir = r"D:\Python\pyfwg\epws\w_pattern"
+    # EPW files versioned in the epws folder at the root of the repository
+    base_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "epws", "w_pattern")
     files = [
         os.path.join(base_dir, "london_uhi-type-2.epw"),
         os.path.join(base_dir, "sevilla_uhi-type-1.epw")

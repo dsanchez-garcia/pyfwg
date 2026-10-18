@@ -30,7 +30,8 @@ from pyfwg.utils import (
 def test_detect_fwg_version(fwg_jars):
     """
     Test the automatic detection of the Future Weather Generator version from a file name.
-    It uses the real paths provided by the user in conftest.py.
+    It uses the JAR paths of the fwg_jars fixture (see conftest.py), which only point to
+    the real files when the FWG_JAR_DIR environment variable is set.
     """
     # Test detection for all 4 major versions/variants
     assert detect_fwg_version(fwg_jars["GLOBAL_V4"]) == "4"
