@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - The tutorial notebooks showed absolute paths of the computer where they were run, including the user name, in their code and saved outputs. The saved outputs now show the `<FWG_JAR_DIR>`, `<TEMP>` and `<HOME>` placeholders instead.
 - The code cells of the tutorials were not highlighted in the documentation, because the `ipython3` Pygments lexer was not installed. The `docs` extra now includes `ipython`.
+- `copy_tutorials` failed on Python 3.9 with a `TypeError` ("expected str, bytes or os.PathLike object, not NoneType") and copied nothing. The `tutorials` folder has no `__init__.py`, and `importlib.resources.files` only supports such namespace packages from Python 3.10. The folder is now looked up from the `pyfwg` package.
 
 ## [0.4.0] - 2026-10-17
 
