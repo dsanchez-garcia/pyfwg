@@ -62,3 +62,6 @@ venv.bak/
 .vscode/
 *.swp
 onedrive_backup
+
+# Jupyter
+.ipynb_checkpoints/
