@@ -2,6 +2,8 @@
 
 Revisión exhaustiva del 2026-10-17 sobre la rama `feature/fwg-v5` (commit `d77c760`, versión 0.4.0 aún sin publicar).
 
+> **Nota de vigencia (2026-10-29):** Este documento ya existía antes de la actualización de pyfwg completada el 2026-10-29. Su contenido refleja el estado de la revisión original y debe contrastarse con el código, las pruebas y la documentación actuales antes de implementar cualquier mejora. Algunos problemas pueden estar ya resueltos y algunas propuestas, prioridades o referencias pueden haber dejado de ser relevantes. Las casillas pendientes no implican que el problema siga vigente.
+
 ## Cómo se ha hecho la revisión
 
 - Lectura completa de `pyfwg/` (unas 5.000 líneas), tests, documentación, notebooks, packaging y scripts de publicación.
