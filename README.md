@@ -196,7 +196,9 @@ The [interface and Excel guide](docs/source/compatibility.rst) records the suppo
 
 The 2026-10-29 interface validation passed all four routes for all ten available JARs (40 generations), plus nine-region XLSX batches with one model and with full eligible ensembles (18 more generations). The 58 EPW/STAT pairs were checked for hourly records, station coordinates and temperature changes. Regional JARs were also verified from an external drive. These checks use one scenario/period per distribution; they do not cover every scientific setting.
 
-Start with the [CORDEX regional notebook](pyfwg/tutorials/cordex_regions_example.ipynb) for all nine JARs, catalog inspection, a direct API call, a workflow preview and a batch across regions. The [direct API](pyfwg/tutorials/epw_morph_global_europe_example.ipynb), [workflow](pyfwg/tutorials/morphingworkflow_global_europe_example.ipynb) and [iterator](pyfwg/tutorials/morphingiterator_example.ipynb) notebooks use the current Global, Europe and regional distributions. All generation is opt-in.
+Start with the [CORDEX regional notebook](pyfwg/tutorials/cordex_regions_example.ipynb) for all nine JARs, catalog inspection, a direct API call, a workflow preview and a batch across regions. The [direct API](pyfwg/tutorials/epw_morph_global_europe_example.ipynb), [workflow](pyfwg/tutorials/morphingworkflow_global_europe_example.ipynb) and [iterator](pyfwg/tutorials/morphingiterator_example.ipynb) notebooks use the current Global, Europe and regional distributions. Their outputs, tables and climate-comparison figures are saved and rendered on Read the Docs without running Java.
+
+Each notebook also has a `*_simple.ipynb` alternative with explicit paths and direct calls, without preventive path checks or fallback branches. The full versions retain their helpers and an opt-in generation switch; the simplified versions generate weather when their cells run. See the [comparison of both styles](docs/source/tutorial_comparison.rst). Install notebook/plotting dependencies with `pip install pyfwg[tutorials]`.
 
 To obtain the notebooks and bundled example files from an installed package:
 
@@ -205,7 +207,7 @@ from pyfwg import copy_tutorials
 copy_tutorials('./pyfwg_tutorials')
 ```
 
-Configure `FWG_JAR_DIR`, optional `FWG_GLOBAL_JAR_PATH`, `FWG_EPW_DIR`, `FWG_CACHE_DIR`, `FWG_OUTPUT_DIR` and optional `FWG_JAVA` in each notebook. Environment variables override an optional, Git-ignored `fwg.local.json`, which overrides notebook defaults. Regional examples use real EPWs named `<domain>.epw`, with public sample links in the regional notebook, and separate caches by distribution/version. Their `RUN_MORPHING=False` default allows you to inspect configurations before starting Java; set it to `True` to generate weather. This switch controls every generation example. See the [CORDEX guide](docs/source/cordex.rst) for disk requirements, SolarQC diagnostics, the validation matrix and baseline-period limitations.
+The full notebooks configure `FWG_JAR_DIR`, optional `FWG_GLOBAL_JAR_PATH`, `FWG_EPW_DIR`, `FWG_CACHE_DIR`, `FWG_OUTPUT_DIR` and optional `FWG_JAVA`. Environment variables override an optional, Git-ignored `fwg.local.json`, which overrides notebook defaults. Regional examples use real EPWs named `<domain>.epw`, with public sample links in the regional notebook, and separate caches by distribution/version. Set `FWG_RUN_MORPHING=1` or `RUN_MORPHING=True` to regenerate the saved examples; generation otherwise stays disabled. The simplified copies use explicit paths and run directly. See the [CORDEX guide](docs/source/cordex.rst) for disk requirements, SolarQC diagnostics, the validation matrix and baseline-period limitations.
 
 ## Changelog
 

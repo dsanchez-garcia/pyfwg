@@ -67,9 +67,13 @@ convention. The library itself takes explicit path arguments.
 Run the configuration and regional helper cells first. ``RUN_MORPHING=False``
 inspects the inputs and prepares regional previews without starting Java.
 Change it to ``True`` to generate weather. This flag applies to the updated
-examples, including Global and Europe. All notebook sources are distributed without saved outputs.
+examples, including Global and Europe. Saved outputs include actual runs enabled
+with ``FWG_RUN_MORPHING=1``, tables and embedded figures. Read the Docs displays
+them without executing Java. Each notebook uses its own output subfolder.
+The :doc:`simplified copies <tutorial_comparison>` run their examples directly.
 
-The examples start with one model, one common scenario and one period. Use
+The executed tutorials use one model, one common scenario and the 2050/2080
+periods so both future climates can be compared with the original EPW. Use
 ``ensemble=True`` in ``regional_inputs`` (or ``USE_ENSEMBLE=True`` in the
 regional notebook) for all eligible members. The helper checks that the
 selection has a common scenario and period, and that the regional EPW exists.

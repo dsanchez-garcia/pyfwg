@@ -43,15 +43,25 @@ inspect its catalog, and use the direct API, workflow or iterator. Its initial
 configuration leaves generation disabled so you can review the regional plans
 before extracting climate data.
 
-The other notebooks use current Global, Europe and regional distributions.
-Every generation example is controlled by ``RUN_MORPHING=False`` by default. Run the configuration cells and the sections
-for the JARs you have installed. Download a notebook from its tutorial page,
-or copy all notebooks and bundled example files from an installed package:
+Both versions of every tutorial include saved execution outputs, tables and
+embedded climate-comparison plots. Read the Docs renders these outputs without
+running Java. The full notebooks retain configuration helpers and checks;
+the ``*_simple`` copies use explicit paths and direct calls without fallback
+branches. They coexist so you can compare their style.
+
+The full notebooks generate weather when ``FWG_RUN_MORPHING=1`` or
+``RUN_MORPHING=True``. The simplified notebooks run generation directly when
+their cells are executed. Viewing the published pages does not execute either
+version. Download a notebook from its page, or copy the tutorials from an
+installed package:
 
 .. code-block:: python
 
    from pyfwg import copy_tutorials
    copy_tutorials("./pyfwg_tutorials")
+
+Install the plotting and notebook dependencies with ``pip install pyfwg[tutorials]``.
+See :doc:`tutorial_comparison` for the side-by-side choice of examples.
 
 JARs and public regional EPWs are separate downloads. The regional notebook
 links to the public samples used in testing and explains the cache and
@@ -68,10 +78,20 @@ This library would not be possible without the foundational work of **Eugénio R
 
    cordex
    compatibility
+   tutorial_comparison
    tutorials/cordex_regions_example
    tutorials/epw_morph_global_europe_example
    tutorials/morphingworkflow_global_europe_example
    tutorials/morphingiterator_example
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Simplified alternatives
+
+   tutorials/cordex_regions_example_simple
+   tutorials/epw_morph_global_europe_example_simple
+   tutorials/morphingworkflow_global_europe_example_simple
+   tutorials/morphingiterator_example_simple
 
 .. toctree::
    :maxdepth: 2

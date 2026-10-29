@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Parallel `*_simple.ipynb` tutorials with direct calls and explicit paths, alongside the full examples. Both styles include real execution outputs and embedded climate-comparison plots for the original EPW and the 2050/2080 periods; Read the Docs renders them without running Java.
+- A `tutorials` installation extra for JupyterLab and Matplotlib.
 - Cross-interface integration tests for installed FWG Engine JARs: direct API, workflow, DataFrame iterator, exported/populated/reloaded XLSX input, single-model and full-ensemble mixed-region XLSX batches, and class/JAR compatibility checks. Additional JAR folders can be supplied with repeatable `--fwg-extra-jar-dir`.
 - A dedicated CORDEX notebook covering all nine regions, manifest-based model/scenario selection, direct API, workflow previews and batches across domains. It includes the real-JAR validation matrix and public baseline sample links.
 - Test coverage for all nine CORDEX-CMIP5 domains, including EUR-11: filename and manifest detection, regional scenarios and models, EPW/STAT collection and mixed-region iterator runs.
@@ -17,13 +19,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Supported binaries are now explicitly limited to verified Global 5.2.0, Europe EUR-11 3.2.0 and the eight other CORDEX-CMIP5 distributions 1.2.0. Older Global/Europe releases are outside the supported scope. Tutorials use current distributions only and a single opt-in generation switch.
 - Notebook paths can be supplied in a Git-ignored `fwg.local.json`; environment variables take precedence. Regional JARs and Global can be on different drives, independently of caches and outputs.
-- Updated the direct API, workflow and iterator notebooks and their identical documentation copies with tested Europe/CORDEX examples, central EPW/cache/output configuration, opt-in regional generation and retained diagnostics. Removed stale availability notices and saved execution outputs. Documentation now explains SolarQC rejection, cache storage/cleanup and the scope of the regional generation checks.
+- Updated the direct API, workflow and iterator notebooks and their identical documentation copies with tested Europe/CORDEX examples, central EPW/cache/output configuration, opt-in regional generation and retained diagnostics. Replaced stale outputs with actual executions and plots. Documentation now explains SolarQC rejection, cache storage/cleanup and the scope of the regional generation checks.
 - **Tutorial Notebooks**: The paths to the JAR files are built from a single configuration cell at the top of each notebook (`FWG_JAR_DIR`, which can also be set with an environment variable), instead of being hardcoded in several cells.
 
 ### Fixed
 - FWG Engine validation now rejects rectilinear bilinear interpolation (`BI`/`1`) for selected models with rotated, projected or curvilinear grids. Known regional distributions use the same restriction when only the JAR filename is available.
 - Model aliases with underscores and hyphens are normalized and deduplicated before counting ensemble members. A single default model also disables ensemble mode; empty selections and catalogs without default models require an explicit usable model.
-- The tutorial notebooks showed machine-specific paths in their code and saved outputs. Configuration now supplies the paths, and saved execution outputs are cleared so they do not expose local folders or imply that examples were rerun with the current configuration.
+- The full tutorials take paths from their configuration. Saved outputs now identify the actual execution context; simplified alternatives keep explicit editable paths for readability.
 - The code cells of the tutorials were not highlighted in the documentation, because the `ipython3` Pygments lexer was not installed. The `docs` extra now includes `ipython`.
 
 ## [0.4.0] - 2026-10-17
