@@ -70,7 +70,7 @@ Change it to ``True`` to generate weather. This flag applies to the updated
 examples, including Global and Europe. Saved outputs include actual runs enabled
 with ``FWG_RUN_MORPHING=1``, tables and embedded figures. Read the Docs displays
 them without executing Java. Each notebook uses its own output subfolder.
-The :doc:`simplified copies <tutorial_comparison>` run their examples directly.
+The :doc:`simple tutorials <tutorial_comparison>` run their examples directly.
 
 The executed tutorials use one model, one common scenario and the 2050/2080
 periods so both future climates can be compared with the original EPW. Use

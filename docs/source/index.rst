@@ -38,19 +38,19 @@ Before using `pyfwg`, you need to have the following installed and configured:
 Choose a tutorial
 -----------------
 
-Start with :doc:`tutorials/cordex_regions_example` to select a regional JAR,
-inspect its catalog, and use the direct API, workflow or iterator. Its initial
-configuration leaves generation disabled so you can review the regional plans
-before extracting climate data.
+Start with the **Simple tutorials** for explicit paths, parameters and direct
+calls. The :doc:`simple regional example <tutorials/cordex_regions_example_simple>`
+shows a complete CORDEX run and its climate-comparison plots.
+Continue with the **Advanced tutorials** for catalog inspection, configuration
+helpers, validation and more extensive workflow and iterator examples.
 
 Both versions of every tutorial include saved execution outputs, tables and
 embedded climate-comparison plots. Read the Docs renders these outputs without
-running Java. The full notebooks retain configuration helpers and checks;
-the ``*_simple`` copies use explicit paths and direct calls without fallback
-branches. They coexist so you can compare their style.
+running Java. Simple tutorials appear first in the navigation, followed by
+the advanced notebooks in their own section.
 
-The full notebooks generate weather when ``FWG_RUN_MORPHING=1`` or
-``RUN_MORPHING=True``. The simplified notebooks run generation directly when
+The advanced notebooks generate weather when ``FWG_RUN_MORPHING=1`` or
+``RUN_MORPHING=True``. The simple notebooks run generation directly when
 their cells are executed. Viewing the published pages does not execute either
 version. Download a notebook from its page, or copy the tutorials from an
 installed package:
@@ -73,20 +73,8 @@ Acknowledgements
 This library would not be possible without the foundational work of **Eugénio Rodrigues (University of Coimbra)**, the creator of the `Future Weather Generator tool <https://future-weather-generator.adai.pt/>`_. `pyfwg` is essentially a Python wrapper designed to automate and streamline the use of his powerful command-line application.
 
 .. toctree::
-   :maxdepth: 2
-   :caption: Getting Started
-
-   cordex
-   compatibility
-   tutorial_comparison
-   tutorials/cordex_regions_example
-   tutorials/epw_morph_global_europe_example
-   tutorials/morphingworkflow_global_europe_example
-   tutorials/morphingiterator_example
-
-.. toctree::
    :maxdepth: 1
-   :caption: Simplified alternatives
+   :caption: Simple tutorials
 
    tutorials/cordex_regions_example_simple
    tutorials/epw_morph_global_europe_example_simple
@@ -95,7 +83,24 @@ This library would not be possible without the foundational work of **Eugénio R
 
 .. toctree::
    :maxdepth: 2
-   :caption: Contents:
+   :caption: Advanced tutorials
+
+   tutorials/cordex_regions_example
+   tutorials/epw_morph_global_europe_example
+   tutorials/morphingworkflow_global_europe_example
+   tutorials/morphingiterator_example
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Guides
+
+   cordex
+   compatibility
+   tutorial_comparison
+
+.. toctree::
+   :maxdepth: 2
+   :caption: API reference
 
    api/modules
 
