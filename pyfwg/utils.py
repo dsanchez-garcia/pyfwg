@@ -302,6 +302,7 @@ def _read_distribution_info(jar_path: str, mtime_ns: int, size: int) -> Optional
                         'scenarios': [_normalize_scenario_id(s) for s in source.get('scenarios') or []],
                         'timeframes': model_timeframes,
                         'components': source.get('components'),
+                        'grid_topology': ((source.get('grid') or {}).get('coordinateReference') or {}).get('topology'),
                     }
 
             engine_version = None
@@ -363,7 +364,8 @@ def get_fwg_distribution_info(jar_path: str) -> Optional[Dict[str, Any]]:
         'cordex'), 'scenario_family', 'framework', 'cmip_generation', 'domain'
         (e.g., 'NAM-44'), 'region', 'scenarios' (e.g., ['rcp45', 'rcp85']),
         'timeframes' (e.g., ['2050', '2080']), 'models', 'ensemble_models' and
-        'model_details'. Returns None if the file does not exist, cannot be read,
+        'model_details' (including each model's 'grid_topology', when declared).
+        Returns None if the file does not exist, cannot be read,
         or is a JAR prior to the FWG Engine (Global v3/v4, Europe v1/v2).
     """
     try:

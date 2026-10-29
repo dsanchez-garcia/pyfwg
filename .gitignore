@@ -69,3 +69,6 @@ onedrive_backup
 # Local scratch folders
 /SS/
 /tests/SS/
+
+# Machine-specific notebook paths (JARs may live on an external drive)
+/fwg.local.json
