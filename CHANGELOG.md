@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Model aliases with underscores and hyphens are normalized and deduplicated before counting ensemble members. A single default model also disables ensemble mode; empty selections and catalogs without default models require an explicit usable model.
 - The full tutorials take paths from their configuration. Saved outputs now identify the actual execution context; simplified alternatives keep explicit editable paths for readability.
 - The code cells of the tutorials were not highlighted in the documentation, because the `ipython3` Pygments lexer was not installed. The `docs` extra now includes `ipython`.
+- `copy_tutorials` failed on Python 3.9 with a `TypeError` ("expected str, bytes or os.PathLike object, not NoneType") and copied nothing. The `tutorials` folder has no `__init__.py`, and `importlib.resources.files` only supports such namespace packages from Python 3.10. The folder is now looked up from the `pyfwg` package.
 
 ## [0.4.0] - 2026-10-17
 
