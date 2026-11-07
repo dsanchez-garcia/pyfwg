@@ -29,6 +29,14 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
+        # setup-python has no Python 3.9 build for Ubuntu 26.04, the image of ubuntu-latest,
+        # so Python 3.9 is tested on Ubuntu 24.04 instead.
+        exclude:
+          - os: ubuntu-latest
+            python-version: "3.9"
+        include:
+          - os: ubuntu-24.04
+            python-version: "3.9"
     defaults:
       run:
         # Also on Windows, so that a failing command stops the step.
