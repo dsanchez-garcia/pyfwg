@@ -3,6 +3,22 @@ import json
 import zipfile
 import pytest
 
+
+def pytest_addoption(parser):
+    group = parser.getgroup("FWG integration")
+    group.addoption("--fwg-jar-dir", default=os.environ.get("FWG_JAR_DIR"),
+                    help="Folder with downloaded FWG JARs; absent regions are skipped.")
+    group.addoption("--fwg-epw-dir", default=os.environ.get("FWG_EPW_DIR"),
+                    help="Enable morphing tests with regional baselines named <domain>.epw (e.g. NAM-44.epw).")
+    group.addoption("--fwg-java", default=os.environ.get("FWG_JAVA", "java"),
+                    help="Java executable used by integration tests (Java 17+).")
+    group.addoption("--fwg-cache-dir", default=os.environ.get("FWG_CACHE_DIR"),
+                    help="Optional shared climate-data cache, separated by CORDEX domain.")
+    group.addoption("--fwg-ensemble-size", type=int, default=None,
+                    help="Limit generation-test ensembles to the first N catalog members (N >= 2).")
+    group.addoption("--fwg-extra-jar-dir", action="append", default=[],
+                    help="Additional JAR folder for the cross-interface integration suite; repeatable.")
+
 @pytest.fixture
 def fwg_jars():
     """
@@ -51,7 +67,7 @@ def make_engine_jar(tmp_path):
             "schemaVersion": "3.0",
             "distribution": {"id": "fwg-test", "name": "FWG Test Distribution", "version": version,
                              "scenarioFamily": "SSP" if framework == "CMIP" else "RCP"},
-            "climateSource": {"framework": framework, "cmipGeneration": "CMIP6",
+            "climateSource": {"framework": framework, "cmipGeneration": "CMIP6" if framework == "CMIP" else "CMIP5",
                               "downscalingFramework": "NONE" if framework == "CMIP" else "CORDEX"},
             "scenarios": [{"id": s, "order": 10 * (i + 1)} for i, s in enumerate(scenarios)],
             "timeframes": [{"id": t, "order": 10 * (i + 1)} for i, t in enumerate(timeframes)],
@@ -72,6 +88,8 @@ def make_engine_jar(tmp_path):
                     "ensembleEligible": details.get("ensembleEligible", True),
                     "scenarios": details.get("scenarios", scenarios),
                     "futurePeriods": [{"timeframe": t} for t in details.get("timeframes", timeframes)],
+                    "grid": {"coordinateReference": {"topology": details.get(
+                        "topology", "RECTILINEAR_GEOGRAPHIC" if domain is None else "CURVILINEAR_ROTATED")}},
                 }
                 jar.writestr(f"futureweathergenerator/resources/{model_id}/model-manifest.json",
                              json.dumps(model_manifest))

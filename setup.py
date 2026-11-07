@@ -96,6 +96,10 @@ setup(
         'colorlog',
     ],
     extras_require={
+        "tutorials": [
+            "matplotlib",
+            "jupyterlab",
+        ],
         "docs": [
             "sphinx",
             "sphinx-rtd-theme",

@@ -665,10 +665,34 @@ class _MorphingWorkflowBase:
             _canonical_model_id(model): details
             for model, details in ((self.distribution_info or {}).get('model_details') or {}).items()
         }
+        requested_models = params.get(self.model_arg_name)
+        if requested_models is None:
+            requested_models = (self.distribution_info or {}).get('ensemble_models')
+        if requested_models is None:
+            requested_models = sorted(self.valid_models)
+        if not requested_models:
+            logger.warning(
+                "Validation failed: at least one climate model is required. Provide a nonempty model selection "
+                "or a catalog with default ensemble models.")
+            is_valid = False
+
+        # BI brackets geographic longitude/latitude axes. Rotated and projected
+        # CORDEX grids require a method that preserves their native topology.
+        if _engine_interpolation_token(params.get('interpolation_method_id')) == 'BI':
+            regional_fallback = self.fwg_tool in ('cordex', 'europe') and not self.distribution_info
+            incompatible = []
+            for model in requested_models:
+                topology = (model_details.get(_canonical_model_id(model)) or {}).get('grid_topology')
+                if (topology and str(topology).upper() != 'RECTILINEAR_GEOGRAPHIC') or regional_fallback:
+                    incompatible.append(model)
+            if incompatible:
+                logger.warning(
+                    "Validation failed: BI requires a RECTILINEAR_GEOGRAPHIC grid, but the selected models "
+                    f"{incompatible} use regional/curvilinear or projected grids. "
+                    "Use IDW, NP, AVG4P, SCI, SGBI or STBI.")
+                is_valid = False
+
         if model_details:
-            requested_models = params.get(self.model_arg_name)
-            if requested_models is None:
-                requested_models = (self.distribution_info or {}).get('ensemble_models') or []
             requested_scenarios = params.get('scenarios') or self.tool_scenarios
             requested_timeframes = [str(t) for t in params.get('timeframes') or self.available_timeframes]
             for model in requested_models:
@@ -843,6 +867,13 @@ class _MorphingWorkflowBase:
         # The engine needs at least two models to build an ensemble. With a single
         # model, the ensemble is equivalent to the output of that model.
         models = params.get(self.model_arg_name)
+        if models is not None:
+            # Aliases using underscores and hyphens denote the same product.
+            # Count distinct products before deciding whether an ensemble is possible.
+            models = list(dict.fromkeys(_canonical_model_id(model) for model in models))
+            params[self.model_arg_name] = models
+        elif self.distribution_info:
+            models = self.distribution_info.get('ensemble_models')
         if models is not None and len(models) == 1 and params.get('create_ensemble', True):
             logger.warning(
                 f"The FWG Engine needs at least two models to create an ensemble. Since only '{models[0]}' "

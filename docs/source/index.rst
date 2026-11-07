@@ -17,13 +17,13 @@ This documentation provides detailed information on the library's three main int
 What's New in Version 0.4.0?
 ----------------------------
 
-Version 0.4.0 adds support for the **FWG Engine**, the shared engine of the latest Future Weather Generator distributions: **Global v5.x**, **Europe v3.x** and the new **CORDEX regional** distributions. Earlier versions keep working exactly as before.
+Version 0.4.0 adds support for the **FWG Engine**, the shared engine of the latest Future Weather Generator distributions: **Global v5.x**, **Europe v3.x** and the new **CORDEX regional** distributions. Supported binaries are Global 5.2.0, Europe EUR-11 3.2.0 and the eight other regional distributions 1.2.0. Older Global/Europe releases are outside the supported scope; see :doc:`compatibility`.
 
 *   **Global v5.x and Europe v3.x**: Use them with the same classes and functions as before. `pyfwg` detects the version from the JAR and builds the new command line for you.
-*   **CORDEX Regional Distributions**: The new ``MorphingWorkflowCordex`` class and ``morph_epw_cordex`` function support the Middle East and North Africa, Africa, North America, Central America, South America, West & South Asia, Southeast Asia and Australasia distributions (see ``CORDEX_REGIONS``).
+*   **CORDEX Regional Distributions**: ``MorphingWorkflowCordex`` and ``morph_epw_cordex`` accept all nine CORDEX-CMIP5 domains, including Europe EUR-11 v3+. The installed manifest determines the models, scenarios, periods and grid topology. See :doc:`cordex` and the :doc:`regional notebook <tutorials/cordex_regions_example>`.
 *   **New FWG Engine Options**: Select scenarios and future periods (``fwg_scenarios``, ``fwg_timeframes``), solar decomposition, illuminance and infrared models, uncertainty cases (``fwg_uncertainty_variant``), output profile and a shared climate-data cache (``fwg_model_unzipped_folder``). Any other option of the tool can be passed with ``fwg_extra_args``.
 *   **JAR Inspection**: ``get_fwg_distribution_info`` reads the scenarios, periods and climate models packaged in FWG Engine JARs, which `pyfwg` also uses to validate your configuration.
-*   **Urban Heat Island**: The FWG Engine no longer supports the UHI effect. By default, `pyfwg` applies it only with the versions that support it (Global v3/v4 and Europe v1/v2).
+*   **Urban Heat Island**: The supported FWG Engine distributions do not implement UHI or LCZ morphing.
 
 Requirements
 ------------
@@ -31,11 +31,41 @@ Requirements
 Before using `pyfwg`, you need to have the following installed and configured:
 
 * **Python 3.9+**
-* **Java**: The ``java`` command must be accessible from your system's terminal (i.e., it must be in your system's PATH).
+* **Java**: The ``java`` command must be accessible from your system's terminal (i.e., it must be in your system's PATH). FWG Engine distributions require Java 17+; the regional generation checks below used Java 25.
 * **Future Weather Generator**: You must download the appropriate ``.jar`` file from the `official website <https://future-weather-generator.adai.pt/>`_.
-    * The **Global Tool** (``FutureWeatherGenerator_vX.X.X.jar``) has been tested with versions **v3.0.0**, **v3.0.1**, and **v4.0.2**.
-    * The **Europe Tool** (``FutureWeatherGenerator_Europe_vX.X.X.jar``) has been tested with versions **v1.0.1** and **v2.0.2**.
-    * The **FWG Engine distributions** have been tested with **Global v5.2.0** (``FutureWeatherGenerator-CMIP6-Global-v5.2.0.jar``, FWG Engine v1.1.0). Europe v3.x (``FutureWeatherGenerator-CORDEX-CMIP5-Europe-EUR-11-v3.X.X.jar``) and the CORDEX regional distributions (``FutureWeatherGenerator-CORDEX-CMIP5-<Region>-<Domain>-v1.X.X.jar``) share the same engine and command-line interface.
+    * The **FWG Engine distributions** have been tested with **Global v5.2.0**, **Europe EUR-11 v3.2.0** and the eight other **CORDEX-CMIP5 regional distributions v1.2.0**, using FWG Engine v1.1.0. On 2026-10-28, all nine regional JARs passed real generation with a single model and the full eligible ensemble, for one scenario and the 2050 period per region. See :doc:`cordex` for the validation matrix and limits of that coverage.
+
+Choose a tutorial
+-----------------
+
+Start with the **Simple tutorials** for explicit paths, parameters and direct
+calls. The :doc:`simple regional example <tutorials/cordex_regions_example_simple>`
+shows a complete CORDEX run and its climate-comparison plots.
+Continue with the **Advanced tutorials** for catalog inspection, configuration
+helpers, validation and more extensive workflow and iterator examples.
+
+Both versions of every tutorial include saved execution outputs, tables and
+embedded climate-comparison plots. Read the Docs renders these outputs without
+running Java. Simple tutorials appear first in the navigation, followed by
+the advanced notebooks in their own section.
+
+The advanced notebooks generate weather when ``FWG_RUN_MORPHING=1`` or
+``RUN_MORPHING=True``. The simple notebooks run generation directly when
+their cells are executed. Viewing the published pages does not execute either
+version. Download a notebook from its page, or copy the tutorials from an
+installed package:
+
+.. code-block:: python
+
+   from pyfwg import copy_tutorials
+   copy_tutorials("./pyfwg_tutorials")
+
+Install the plotting and notebook dependencies with ``pip install pyfwg[tutorials]``.
+See :doc:`tutorial_comparison` for the side-by-side choice of examples.
+
+JARs and public regional EPWs are separate downloads. The regional notebook
+links to the public samples used in testing and explains the cache and
+diagnostic folders.
 
 Acknowledgements
 ----------------
@@ -43,16 +73,34 @@ Acknowledgements
 This library would not be possible without the foundational work of **Eugénio Rodrigues (University of Coimbra)**, the creator of the `Future Weather Generator tool <https://future-weather-generator.adai.pt/>`_. `pyfwg` is essentially a Python wrapper designed to automate and streamline the use of his powerful command-line application.
 
 .. toctree::
-   :maxdepth: 2
-   :caption: Getting Started
+   :maxdepth: 1
+   :caption: Simple tutorials
 
+   tutorials/cordex_regions_example_simple
+   tutorials/epw_morph_global_europe_example_simple
+   tutorials/morphingworkflow_global_europe_example_simple
+   tutorials/morphingiterator_example_simple
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Advanced tutorials
+
+   tutorials/cordex_regions_example
    tutorials/epw_morph_global_europe_example
    tutorials/morphingworkflow_global_europe_example
    tutorials/morphingiterator_example
 
 .. toctree::
    :maxdepth: 2
-   :caption: Contents:
+   :caption: Guides
+
+   cordex
+   compatibility
+   tutorial_comparison
+
+.. toctree::
+   :maxdepth: 2
+   :caption: API reference
 
    api/modules
 

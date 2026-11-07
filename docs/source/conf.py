@@ -46,8 +46,8 @@ extensions = [
     'nbsphinx',
 ]
 
-# (Opcional) Para controlar cuándo se ejecuta el código del notebook
-# 'auto': se ejecuta si no hay salida guardada. 'always': se ejecuta siempre. 'never': nunca se ejecuta.
+# Render saved notebook tables and figures; the documentation build must not
+# launch Java or require the large FWG JARs and local EPW files.
 nbsphinx_execute = 'never'
 
 # Autodoc settings to ensure members are documented

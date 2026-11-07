@@ -341,7 +341,7 @@ def test_engine_europe_v3(temp_epw, tmp_path):
     assert wf.is_config_valid
     assert wf.cli_style == "engine"
     cmd = wf._build_command_engine(temp_epw, "temp.epw", "out")
-    assert "-models=ICHEC_EC_EARTH_SMHI_RCA4,MOHC-HadGEM2-ES-SMHI-RCA4" in cmd
+    assert "-models=ICHEC-EC-EARTH-SMHI-RCA4,MOHC-HadGEM2-ES-SMHI-RCA4" in cmd
 
 
 # --- Generated files ---
