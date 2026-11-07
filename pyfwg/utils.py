@@ -14,6 +14,7 @@ import time
 import re
 import zipfile
 from functools import lru_cache
+from importlib import resources
 from typing import List, Union, Dict, Optional, Any
 import ast
 import numpy as np
@@ -38,13 +39,6 @@ logger = logging.getLogger(__name__)
 # Locations of the metadata packaged inside FWG Engine JARs.
 _ENGINE_RESOURCES_DIR = 'futureweathergenerator/resources/'
 _ENGINE_VERSION_PROPERTIES = 'futureweathergenerator/version.properties'
-
-# Import the modern way to access package data (Python 3.9+)
-try:
-    from importlib import resources
-except ImportError:
-    # Fallback for older Python versions
-    import importlib_resources as resources
 
 def copy_tutorials(dest_dir: str = './pyfwg_tutorials'):
     """Copies the example Jupyter notebooks and their required data files to a local directory.

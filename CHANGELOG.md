@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Continuous Integration**: A GitHub Actions workflow runs the tests on Python 3.9 to 3.14, on Linux and Windows, for every pull request and every push to `main`.
 - Parallel `*_simple.ipynb` tutorials with direct calls and explicit paths, alongside the full examples. Both styles include real execution outputs and embedded climate-comparison plots for the original EPW and the 2050/2080 periods; Read the Docs renders them without running Java.
 - A `tutorials` installation extra for JupyterLab and Matplotlib.
 - Cross-interface integration tests for installed FWG Engine JARs: direct API, workflow, DataFrame iterator, exported/populated/reloaded XLSX input, single-model and full-ensemble mixed-region XLSX batches, and class/JAR compatibility checks. Additional JAR folders can be supplied with repeatable `--fwg-extra-jar-dir`.
@@ -23,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Tutorial Notebooks**: The paths to the JAR files are built from a single configuration cell at the top of each notebook (`FWG_JAR_DIR`, which can also be set with an environment variable), instead of being hardcoded in several cells.
 
 ### Fixed
+- The package metadata listed Python 3.8, which pyfwg does not support (it requires Python 3.9 or later), and no version after Python 3.11. The classifiers now list Python 3.9 to 3.14, the versions tested by the continuous integration. The unused `importlib_resources` requirement for Python 3.8 and older was removed.
 - FWG Engine validation now rejects rectilinear bilinear interpolation (`BI`/`1`) for selected models with rotated, projected or curvilinear grids. Known regional distributions use the same restriction when only the JAR filename is available.
 - Model aliases with underscores and hyphens are normalized and deduplicated before counting ensemble members. A single default model also disables ensemble mode; empty selections and catalogs without default models require an explicit usable model.
 - The full tutorials take paths from their configuration. Saved outputs now identify the actual execution context; simplified alternatives keep explicit editable paths for readability.
